@@ -133,16 +133,16 @@ cmd_install() {
   wait_for_postgres "$compose_file_args"
 
   echo "[INFO] Running Alembic migrations for tgo-rag..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-rag poetry run alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-rag alembic upgrade head
 
   echo "[INFO] Running Alembic migrations for tgo-ai..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-ai poetry run alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-ai alembic upgrade head
 
   echo "[INFO] Running Alembic migrations for tgo-api..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-api poetry run alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-api alembic upgrade head
 
   echo "[INFO] Running Alembic migrations for tgo-platform..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -e PYTHONPATH=. tgo-platform poetry run alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -e PYTHONPATH=. tgo-platform alembic upgrade head
 
   echo "[INFO] Starting all core services..."
   docker compose --env-file "$ENV_FILE" $compose_file_args up -d

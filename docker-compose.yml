@@ -99,7 +99,7 @@ services:
       tgo-rag:
         condition: service_started
     command: >
-      sh -c "poetry run celery -A src.rag_service.tasks.celery_app worker --loglevel=info"
+      sh -c "celery -A src.rag_service.tasks.celery_app worker --loglevel=info"
     restart: unless-stopped
 
   # RAG Celery beat (scheduler)
@@ -117,7 +117,7 @@ services:
       tgo-rag:
         condition: service_started
     command: >
-      sh -c "poetry run celery -A src.rag_service.tasks.celery_app beat --loglevel=info"
+      sh -c "celery -A src.rag_service.tasks.celery_app beat --loglevel=info"
     restart: unless-stopped
 
   # RAG Flower (Celery monitoring UI)
@@ -133,7 +133,7 @@ services:
       tgo-rag:
         condition: service_started
     command: >
-      sh -c "poetry run celery -A src.rag_service.tasks.celery_app flower --port=5555"
+      sh -c "celery -A src.rag_service.tasks.celery_app flower --port=5555"
     restart: unless-stopped
 
   # RAG service
@@ -166,7 +166,7 @@ services:
       tgo-rag:
         condition: service_started
     command: >
-      sh -c "poetry run alembic upgrade head && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8081"
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8081"
     restart: unless-stopped
 
   # API service

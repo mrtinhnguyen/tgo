@@ -1,7 +1,7 @@
-# TGO Platform Service Dockerfile
-# Python FastAPI service using Poetry
-
-FROM python:3.11-slim
+# =========================
+# Builder stage
+# =========================
+FROM python:3.11-slim AS builder
 
 # Environment
 ENV PYTHONUNBUFFERED=1 \
@@ -9,30 +9,57 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Workdir
 WORKDIR /app
 
-# System deps
+# System build deps (builder-only)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
-        curl \
-        libpq-dev \
         gcc \
+        libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Poetry
+# Poetry (pinned to existing version)
 RUN pip install poetry==1.8.3
+
+# Configure Poetry to use a local venv
 ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VENV_IN_PROJECT=0 \
-    POETRY_VIRTUALENVS_CREATE=false \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
 # Python deps first (for layer cache)
 COPY pyproject.toml poetry.lock* ./
-RUN poetry install --only=main --no-root && rm -rf $POETRY_CACHE_DIR
+RUN poetry install --only=main --no-root && rm -rf "$POETRY_CACHE_DIR"
 
-# App code
+# App code (for Alembic/env, etc.)
+COPY . .
+
+# =========================
+# Runtime stage
+# =========================
+FROM python:3.11-slim AS runtime
+
+# Environment
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# Minimal runtime deps
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpq-dev \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy venv from builder (keep same path to preserve shebang)
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy application code
 COPY . .
 
 # Network
@@ -42,6 +69,5 @@ EXPOSE 8003
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8003/health || exit 1
 
-# Start
-CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
-
+# Start app via uvicorn directly (no Poetry at runtime)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
