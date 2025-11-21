@@ -187,28 +187,44 @@ cmd_install() {
 
   # Create directories and set permissions
   for dir in "${DATA_DIRS[@]}"; do
+    # Check if directory exists and is writable
+    if [ -d "$dir" ] && [ -w "$dir" ]; then
+      echo "  ✓ $dir (already exists and writable)"
+      continue
+    fi
+
+    # Directory doesn't exist or isn't writable - need to create/fix it
     if [ ! -d "$dir" ]; then
       echo "  Creating $dir..."
       mkdir -p "$dir"
-    fi
 
-    # Set ownership to target user
-    # Use sudo if we're running as root but want to set ownership to a different user
-    if [ "$(id -u)" -eq 0 ] && [ "$TARGET_UID" -ne 0 ]; then
-      chown -R "$TARGET_UID:$TARGET_GID" "$dir"
-      echo "  Set ownership of $dir to $TARGET_USER ($TARGET_UID:$TARGET_GID)"
-    elif [ "$(id -u)" -eq 0 ]; then
-      # Running as root and target is also root, but we want containers to write
-      # Set to 1000:1000 which is the common non-root user in Docker containers
-      chown -R 1000:1000 "$dir"
-      echo "  Set ownership of $dir to 1000:1000 (Docker default)"
+      # Set ownership and permissions only for newly created directories
+      if [ "$(id -u)" -eq 0 ] && [ "$TARGET_UID" -ne 0 ]; then
+        # Running as root, set to actual user
+        chown -R "$TARGET_UID:$TARGET_GID" "$dir"
+        chmod -R 755 "$dir"
+        echo "  Set ownership to $TARGET_USER ($TARGET_UID:$TARGET_GID)"
+      elif [ "$(id -u)" -eq 0 ]; then
+        # Running as root, set to Docker default user
+        chown -R 1000:1000 "$dir"
+        chmod -R 755 "$dir"
+        echo "  Set ownership to 1000:1000 (Docker default)"
+      else
+        # Running as normal user, just set permissions
+        chmod -R 755 "$dir" 2>/dev/null || echo "  ⚠ Created but cannot set permissions (may need sudo)"
+      fi
     else
-      # Not running as root, just ensure directory exists
-      echo "  Directory $dir exists with current user ownership"
+      # Directory exists but not writable
+      echo "  ⚠ $dir exists but not writable"
+      if [ "$(id -u)" -eq 0 ]; then
+        # We're root, we can fix it
+        chown -R "$TARGET_UID:$TARGET_GID" "$dir" 2>/dev/null || chown -R 1000:1000 "$dir"
+        chmod -R 755 "$dir"
+        echo "  Fixed permissions"
+      else
+        echo "  ⚠ Run with sudo to fix permissions, or manually run: sudo chown -R \$USER:$TARGET_GID $dir"
+      fi
     fi
-
-    # Ensure directory is writable
-    chmod -R 755 "$dir"
   done
 
   echo "[INFO] Data directories created and permissions set."
