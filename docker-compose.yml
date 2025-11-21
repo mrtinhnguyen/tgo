@@ -55,7 +55,7 @@ services:
     restart: always
   # Kafka (single-node KRaft)
   kafka:
-    image: apache/kafka:latest
+    image: apache/kafka:4.1.1
     container_name: tgo-api-kafka
     environment:
       - KAFKA_NODE_ID=1

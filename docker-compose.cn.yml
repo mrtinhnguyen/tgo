@@ -1,0 +1,51 @@
+# Docker Compose override for China network environment
+# This file overrides image sources to use Alibaba Cloud Container Registry (ACR)
+# for faster image pulling in mainland China.
+#
+# Usage: ./tgo.sh install --cn
+#
+# This file is part of the project and can be manually edited if needed.
+
+name: tgo-suite
+
+services:
+  # Infrastructure services - using Alibaba Cloud mirrors
+  postgres:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/pgvector:pg16
+
+  redis:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/redis:7-alpine
+
+  # wukongim already uses Alibaba Cloud registry, no override needed
+
+  kafka:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/kafka:4.1.1
+
+  # TGO application services - using Alibaba Cloud ACR
+  tgo-rag-worker:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-rag:latest
+
+  tgo-rag-beat:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-rag:latest
+
+  tgo-rag-flower:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-rag:latest
+
+  tgo-rag:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-rag:latest
+
+  tgo-ai:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-ai:latest
+
+  tgo-api:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-api:latest
+
+  tgo-platform:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-platform:latest
+
+  tgo-web:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-web:latest
+
+  tgo-widget-app:
+    image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-widget-app:latest
+

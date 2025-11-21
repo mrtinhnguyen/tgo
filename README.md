@@ -28,14 +28,32 @@
 
 ## tgo.sh 命令一览
 - `./tgo.sh help`：查看所有命令及用法
-- `./tgo.sh install`：构建镜像、执行迁移并启动全部服务
-- `./tgo.sh uninstall`：停止并移除所有服务，可选择是否删除 `./data/`
-- `./tgo.sh service start`：启动核心服务（等同 `docker compose up -d`）
-- `./tgo.sh service stop`：停止核心服务（等同 `docker compose down`）
-- `./tgo.sh service remove`：停止核心服务并移除镜像（等同 `docker compose down --rmi local`）
+- `./tgo.sh install [--source] [--cn]`：部署全部服务（执行迁移并启动）
+- `./tgo.sh uninstall [--source] [--cn]`：停止并移除所有服务，可选择是否删除 `./data/`
+- `./tgo.sh service start [--source] [--cn]`：启动核心服务
+- `./tgo.sh service stop [--source] [--cn]`：停止核心服务
+- `./tgo.sh service remove [--source] [--cn]`：停止核心服务并移除镜像
 - `./tgo.sh tools start`：启动调试工具（kafka-ui、adminer）
 - `./tgo.sh tools stop`：停止调试工具
-- `./tgo.sh build <service>`：重建并重启指定服务（api|rag|ai|platform|web|widget|all）
+- `./tgo.sh build --source [--cn] <service>`：重建并重启指定服务（api|rag|ai|platform|web|widget|all）
+
+### 部署模式选项
+- **`--source`**：从本地源码构建镜像（使用 `repos/` 目录）
+- **`--cn`**：使用中国镜像源（阿里云 ACR），适用于中国境内网络环境
+- 两个选项可以组合使用：`./tgo.sh install --source --cn`
+
+### 中国境内网络优化
+如果你在中国境内部署，强烈建议使用 `--cn` 参数以获得更快的镜像拉取速度：
+
+```bash
+# 使用阿里云 ACR 镜像部署（推荐）
+./tgo.sh install --cn
+
+# 从源码构建并部署
+./tgo.sh install --source --cn
+```
+
+详细说明请参考：[中国境内网络环境部署指南](docs/CN_MIRROR_GUIDE.md)
 
 ## 目录结构与持久化数据
 - `docker-compose.yml`：服务编排
