@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'tgo 文档',
+  title: 'Tgo 文档',
   tagline: '开源智能客服系统文档（多智能体 · 知识库 · MCP 工具 · 多渠道接入）',
   favicon: 'img/favicon.ico',
 
@@ -43,7 +43,7 @@ const config: Config = {
           routeBasePath: '/', // 文档挂在站点根路径
           sidebarPath: './sidebars.ts',
           // 根据实际仓库调整，当前示例指向 tgo 主仓库
-          editUrl: 'https://github.com/tgoai/tgo/edit/main',
+          editUrl: 'https://github.com/tgoai/tgo/edit/main/docs-site/',
         },
         // 目前只用文档，不启用博客
         blog: false,
@@ -60,10 +60,11 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'tgo 文档',
+      title: 'Tgo 文档',
       logo: {
-        alt: 'tgo 文档',
+        alt: 'Tgo 文档',
         src: 'img/logo.svg',
+        href: 'https://docs.tgo.ai/',
       },
       items: [
         {
@@ -71,6 +72,7 @@ const config: Config = {
           sidebarId: 'docsSidebar',
           position: 'left',
           label: '文档',
+          href: 'https://docs.tgo.ai/',
         },
         {
           href: 'https://github.com/tgoai/tgo',
