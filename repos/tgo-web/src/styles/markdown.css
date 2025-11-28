@@ -12,13 +12,150 @@
   text-align: left;
   font-size: 14px;
   max-width: 420px;
-  word-break: break-all;
   overflow-y: auto;
 }
 
 .markdown-content li>p {
   margin-top: 0;
   margin-bottom: 0;
+}
+
+/* Code block styles - Light mode */
+.markdown-content pre {
+  background-color: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #24292e;
+  white-space: pre;
+  word-break: normal;
+}
+
+/* Inline code - Light mode */
+.markdown-content code:not(pre code) {
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.9em;
+  color: #24292e;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Code block styles - Dark mode */
+.dark .markdown-content pre {
+  background-color: #161b22;
+  border-color: #30363d;
+}
+
+.dark .markdown-content pre code {
+  color: #e6edf3;
+}
+
+/* Inline code - Dark mode */
+.dark .markdown-content code:not(pre code) {
+  background-color: rgba(110, 118, 129, 0.4);
+  color: #e6edf3;
+}
+
+/* Highlight.js syntax highlighting - Dark mode overrides */
+.dark .markdown-content .hljs {
+  color: #e6edf3;
+  background: transparent;
+}
+
+.dark .markdown-content .hljs-comment,
+.dark .markdown-content .hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.dark .markdown-content .hljs-keyword,
+.dark .markdown-content .hljs-selector-tag,
+.dark .markdown-content .hljs-type {
+  color: #ff7b72;
+}
+
+.dark .markdown-content .hljs-string,
+.dark .markdown-content .hljs-addition {
+  color: #a5d6ff;
+}
+
+.dark .markdown-content .hljs-number,
+.dark .markdown-content .hljs-literal {
+  color: #79c0ff;
+}
+
+.dark .markdown-content .hljs-built_in,
+.dark .markdown-content .hljs-builtin-name {
+  color: #ffa657;
+}
+
+.dark .markdown-content .hljs-function,
+.dark .markdown-content .hljs-title {
+  color: #d2a8ff;
+}
+
+.dark .markdown-content .hljs-attr,
+.dark .markdown-content .hljs-variable,
+.dark .markdown-content .hljs-template-variable {
+  color: #79c0ff;
+}
+
+.dark .markdown-content .hljs-class .hljs-title,
+.dark .markdown-content .hljs-title.class_ {
+  color: #ffa657;
+}
+
+.dark .markdown-content .hljs-params {
+  color: #e6edf3;
+}
+
+.dark .markdown-content .hljs-regexp {
+  color: #a5d6ff;
+}
+
+.dark .markdown-content .hljs-symbol,
+.dark .markdown-content .hljs-bullet {
+  color: #ffa657;
+}
+
+.dark .markdown-content .hljs-meta {
+  color: #8b949e;
+}
+
+.dark .markdown-content .hljs-deletion {
+  color: #ffa198;
+  background-color: rgba(248, 81, 73, 0.1);
+}
+
+.dark .markdown-content .hljs-addition {
+  color: #7ee787;
+  background-color: rgba(46, 160, 67, 0.15);
+}
+
+.dark .markdown-content .hljs-selector-class,
+.dark .markdown-content .hljs-selector-id {
+  color: #7ee787;
+}
+
+.dark .markdown-content .hljs-emphasis {
+  font-style: italic;
+}
+
+.dark .markdown-content .hljs-strong {
+  font-weight: bold;
 }
 
 /* Remove default margins from first and last elements */

@@ -615,7 +615,8 @@ export enum MessagePayloadType {
   TEXT = 1,
   IMAGE = 2,
   FILE = 3,
-  RICH_TEXT = 12
+  RICH_TEXT = 12,
+  STREAM = 100  // 流消息类型（AI 流式输出开始）
 }
 
 // Strongly-typed message payloads

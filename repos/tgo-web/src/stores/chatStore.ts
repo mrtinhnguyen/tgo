@@ -9,6 +9,7 @@ import type {
   WuKongIMMessage,
   MessageSenderType
 } from '@/types';
+import { MessagePayloadType } from '@/types';
 import { WuKongIMApiService, WuKongIMUtils } from '@/services/wukongimApi';
 
 import { diffMinutesFromNow } from '@/utils/dateUtils';
@@ -24,6 +25,9 @@ import { useOnboardingStore } from './onboardingStore';
 // Debounce map for unread clearing API calls (per conversation)
 const pendingUnreadTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
+// Track channels currently loading history to prevent duplicate requests
+const loadingHistoryChannels = new Set<string>();
+
 interface ChatState {
   // 聊天列表相关
   chats: Chat[];
@@ -34,12 +38,14 @@ interface ChatState {
   messages: Message[];
   isLoading: boolean;
   isSending: boolean;
+  isStreamingInProgress: boolean; // 标记是否有流消息正在进行中
 
   // WuKongIM 同步相关
   isSyncing: boolean;
   lastSyncTime: string | null;
   syncVersion: number;
   syncError: string | null;
+  hasSyncedOnce: boolean; // 标记是否已经同步过会话列表
 
   // 历史消息相关
   historicalMessages: Record<string, WuKongIMMessage[]>; // channelKey -> messages
@@ -76,9 +82,11 @@ interface ChatState {
 
   // AI stream message handling
   appendStreamMessageContent: (clientMsgNo: string, content: string) => void;
+  markStreamMessageEnd: (clientMsgNo: string) => void;
 
   // 聊天操作
   createChat: (_visitorName: string, platform: string) => void;
+  createChatByChannel: (channelId: string, channelType: number, options?: { platform?: string; name?: string; avatar?: string }) => Chat;
   deleteChat: (chatId: string) => void;
   updateChatStatus: (chatId: string, status: string) => void;
 
@@ -88,6 +96,8 @@ interface ChatState {
 
   // WuKongIM 同步相关
   syncConversations: () => Promise<void>;
+  syncConversationsIfNeeded: () => Promise<void>; // 仅在未同步过时同步
+  forceSyncConversations: () => Promise<void>; // 强制同步（用于 WebSocket 重连后）
   setSyncing: (syncing: boolean) => void;
   setSyncError: (error: string | null) => void;
   convertWuKongIMToChat: (conversation: WuKongIMConversation) => Chat;
@@ -125,12 +135,14 @@ export const useChatStore = create<ChatState>()(
         messages: [],
         isLoading: false,
         isSending: false,
+        isStreamingInProgress: false,
 
         // WuKongIM 同步状态
         isSyncing: false,
         lastSyncTime: null,
         syncVersion: 0,
         syncError: null,
+        hasSyncedOnce: false,
 
         // 历史消息状态
         historicalMessages: {},
@@ -224,6 +236,43 @@ export const useChatStore = create<ChatState>()(
             false,
             'createChat'
           );
+        },
+
+        createChatByChannel: (channelId: string, channelType: number, options?: { platform?: string; name?: string; avatar?: string }) => {
+          const key = getChannelKey(channelId, channelType);
+          const platform = options?.platform || WuKongIMUtils.getPlatformFromChannelType(channelType);
+          const nowSec = Math.floor(Date.now() / 1000);
+          
+          const newChat: Chat = {
+            id: key,
+            platform,
+            lastMessage: '',
+            timestamp: new Date().toISOString(),
+            lastTimestampSec: nowSec,
+            status: CHAT_STATUS_CONST.ACTIVE as ChatStatus,
+            unreadCount: 0,
+            channelId,
+            channelType,
+            lastMsgSeq: 0,
+            tags: [],
+            priority: CHAT_PRIORITY_CONST.NORMAL,
+            metadata: {}
+          };
+
+          set(
+            (state) => {
+              // Check if chat already exists
+              const exists = state.chats.some(c => c.channelId === channelId && c.channelType === channelType);
+              if (exists) {
+                return {} as any;
+              }
+              return { chats: [newChat, ...state.chats] } as any;
+            },
+            false,
+            'createChatByChannel'
+          );
+
+          return newChat;
         },
 
         deleteChat: (chatId) => set(
@@ -376,7 +425,8 @@ export const useChatStore = create<ChatState>()(
               syncVersion: maxVersion,
               lastSyncTime: new Date().toISOString(),
               isSyncing: false,
-              syncError: null
+              syncError: null,
+              hasSyncedOnce: true
             }, false, 'syncConversationsSuccess');
 
           } catch (error) {
@@ -387,14 +437,39 @@ export const useChatStore = create<ChatState>()(
           }
         },
 
+        // 仅在未同步过时同步会话列表
+        syncConversationsIfNeeded: async () => {
+          const { hasSyncedOnce, isSyncing, syncConversations } = get();
+          if (hasSyncedOnce || isSyncing) {
+            console.log('📋 syncConversationsIfNeeded: Skipping sync (already synced or syncing)', { hasSyncedOnce, isSyncing });
+            return;
+          }
+          console.log('📋 syncConversationsIfNeeded: First time sync');
+          await syncConversations();
+        },
+
+        // 强制同步会话列表（用于 WebSocket 重连后）
+        forceSyncConversations: async () => {
+          console.log('📋 forceSyncConversations: Force syncing conversations after reconnect');
+          await get().syncConversations();
+        },
+
         // 历史消息管理
         loadHistoricalMessages: async (channelId: string, channelType: number) => {
+          const key = getChannelKey(channelId, channelType);
+          
+          // 防止重复请求：如果该频道正在加载中，直接返回
+          if (loadingHistoryChannels.has(key)) {
+            console.log('loadHistoricalMessages: Already loading for', key, ', skipping');
+            return;
+          }
+          
+          loadingHistoryChannels.add(key);
           set({ isLoadingHistory: true, historyError: null });
 
           try {
             const response = await WuKongIMApiService.getChannelHistory(channelId, channelType, 50);
             console.log('loadHistoricalMessages: Response received for', channelId, response);
-            const key = getChannelKey(channelId, channelType);
 
             // Sort and store messages for the channel
             const sortedAsc = WuKongIMUtils.sortMessages(response.messages, 'asc');
@@ -443,8 +518,11 @@ export const useChatStore = create<ChatState>()(
                 })
               }));
             }
+            // 加载完成，清除跟踪
+            loadingHistoryChannels.delete(key);
           } catch (error) {
             console.error('Failed to load historical messages:', error);
+            loadingHistoryChannels.delete(key);
             set({
               historyError: error instanceof Error ? error.message : '加载历史消息失败',
               isLoadingHistory: false
@@ -873,6 +951,15 @@ export const useChatStore = create<ChatState>()(
             });
           }
 
+          // Check if this is a stream start message (type=100)
+          const isStreamStart = message.payloadType === MessagePayloadType.STREAM || 
+            (message.payload as any)?.type === MessagePayloadType.STREAM;
+          
+          if (isStreamStart) {
+            console.log('📨 Chat Store: Stream message started (type=100)');
+            set({ isStreamingInProgress: true }, false, 'handleRealtimeMessage:streamStart');
+          }
+
           // 3. If message is for the currently active conversation, add to message list
           if (activeChat && isSameChannel(activeChat.channelId, activeChat.channelType, channelId, channelType)) {
             console.log('📨 Chat Store: Adding message to active conversation');
@@ -1035,19 +1122,76 @@ export const useChatStore = create<ChatState>()(
         appendStreamMessageContent: (clientMsgNo: string, content: string) => {
           const state = get();
 
-          // Find the message by clientMsgNo (flattened)
+          // Find the message by clientMsgNo in real-time messages first
           const messageIndex = state.messages.findIndex(msg =>
             msg.clientMsgNo === clientMsgNo
           );
 
+          // If not found in real-time messages, check historical messages
           if (messageIndex === -1) {
+            // Search in historicalMessages (WuKongIMMessage format)
+            let foundInHistory = false;
+            let historyChannelKey: string | null = null;
+            let historyMessageIndex = -1;
+
+            for (const [channelKey, messages] of Object.entries(state.historicalMessages)) {
+              const idx = messages.findIndex(msg => msg.client_msg_no === clientMsgNo);
+              if (idx !== -1) {
+                foundInHistory = true;
+                historyChannelKey = channelKey;
+                historyMessageIndex = idx;
+                break;
+              }
+            }
+
+            if (foundInHistory && historyChannelKey !== null && historyMessageIndex !== -1) {
+              // Update historical message
+              const historyMessage = state.historicalMessages[historyChannelKey][historyMessageIndex];
+              const oldStreamData = historyMessage.stream_data || '';
+              const newStreamData = oldStreamData + content;
+
+              console.log('🤖 Chat Store: Updating historical message stream_data', {
+                clientMsgNo,
+                channelKey: historyChannelKey,
+                oldLength: oldStreamData.length,
+                appendedLength: content.length,
+                newLength: newStreamData.length
+              });
+
+              set(
+                (s) => {
+                  const updatedHistoricalMessages = { ...s.historicalMessages };
+                  const channelMessages = [...(updatedHistoricalMessages[historyChannelKey!] || [])];
+                  if (channelMessages[historyMessageIndex]) {
+                    channelMessages[historyMessageIndex] = {
+                      ...channelMessages[historyMessageIndex],
+                      stream_data: newStreamData
+                    };
+                    updatedHistoricalMessages[historyChannelKey!] = channelMessages;
+                  }
+
+                  // Also update conversation preview
+                  const updatedChats = s.chats.map(chat => {
+                    const chatKey = getChannelKey(chat.channelId, chat.channelType);
+                    if (chatKey === historyChannelKey && newStreamData.length > 0) {
+                      return { ...chat, lastMessage: newStreamData };
+                    }
+                    return chat;
+                  });
+
+                  return { historicalMessages: updatedHistoricalMessages, chats: updatedChats };
+                },
+                false,
+                'appendStreamMessageContent:historical'
+              );
+              return;
+            }
+
+            // Message not found in either location
             console.warn('🤖 Chat Store: Message not found for stream update', {
               clientMsgNo,
-              availableMessages: state.messages.map(m => ({
-                id: m.id,
-                clientMsgNo: m.clientMsgNo,
-                content_preview: m.content.substring(0, 30)
-              }))
+              realtimeMessagesCount: state.messages.length,
+              historicalChannels: Object.keys(state.historicalMessages).length
             });
             return;
           }
@@ -1058,12 +1202,8 @@ export const useChatStore = create<ChatState>()(
           const isFirstChunk = !hasStreamStarted;
           const oldContent = message.content;
 
-
-
           const baseContent = isFirstChunk ? '' : oldContent;
           const newContent = baseContent + content;
-
-          console.log("newContent---->",newContent)
 
           console.log('🤖 Chat Store: Updating message content', {
             messageId: message.id,
@@ -1071,9 +1211,7 @@ export const useChatStore = create<ChatState>()(
             isFirstChunk,
             oldContentLength: oldContent.length,
             appendedLength: content.length,
-            newContentLength: newContent.length,
-            oldPreview: oldContent.substring(0, 50),
-            newPreview: newContent.substring(0, 50)
+            newContentLength: newContent.length
           });
 
           // Update the message with appended content
@@ -1119,6 +1257,73 @@ export const useChatStore = create<ChatState>()(
           });
         },
 
+        /**
+         * Mark a stream message as ended (AI streaming finished)
+         * @param clientMsgNo - The client_msg_no of the message to mark as ended
+         */
+        markStreamMessageEnd: (clientMsgNo: string) => {
+          const state = get();
+
+          // Find the message by clientMsgNo in real-time messages first
+          const messageIndex = state.messages.findIndex(msg =>
+            msg.clientMsgNo === clientMsgNo
+          );
+
+          // If found in real-time messages, mark as not streaming
+          if (messageIndex !== -1) {
+            console.log('🤖 Chat Store: Marking stream message as ended (realtime)', { clientMsgNo });
+            set(
+              (s) => {
+                const updatedMessages = s.messages.map((msg, idx) => {
+                  if (idx === messageIndex) {
+                    return {
+                      ...msg,
+                      metadata: {
+                        ...(msg.metadata ?? {}),
+                        is_streaming: false
+                      }
+                    };
+                  }
+                  return msg;
+                });
+                return { messages: updatedMessages, isStreamingInProgress: false };
+              },
+              false,
+              'markStreamMessageEnd:realtime'
+            );
+            return;
+          }
+
+          // If not found in real-time messages, check historical messages
+          for (const [channelKey, messages] of Object.entries(state.historicalMessages)) {
+            const idx = messages.findIndex(msg => msg.client_msg_no === clientMsgNo);
+            if (idx !== -1) {
+              console.log('🤖 Chat Store: Marking stream message as ended (historical)', { clientMsgNo, channelKey });
+              set(
+                (s) => {
+                  const updatedHistoricalMessages = { ...s.historicalMessages };
+                  const channelMessages = [...(updatedHistoricalMessages[channelKey] || [])];
+                  if (channelMessages[idx]) {
+                    channelMessages[idx] = {
+                      ...channelMessages[idx],
+                      end: 1 // Mark as ended
+                    };
+                    updatedHistoricalMessages[channelKey] = channelMessages;
+                  }
+                  return { historicalMessages: updatedHistoricalMessages, isStreamingInProgress: false };
+                },
+                false,
+                'markStreamMessageEnd:historical'
+              );
+              return;
+            }
+          }
+
+          // If message not found, still clear streaming state (safety measure)
+          console.warn('🤖 Chat Store: Message not found for stream end', { clientMsgNo });
+          set({ isStreamingInProgress: false }, false, 'markStreamMessageEnd:notFound');
+        },
+
         // Initialize store with empty data; conversations will be loaded from real APIs
         initializeStore: async () => {
           set({ chats: [] }, false, 'initializeEmpty');
@@ -1140,10 +1345,12 @@ export const useChatStore = create<ChatState>()(
             messages: [],
             isLoading: false,
             isSending: false,
+            isStreamingInProgress: false,
             isSyncing: false,
             lastSyncTime: null,
             syncVersion: 0,
             syncError: null,
+            hasSyncedOnce: false,
             historicalMessages: {},
             isLoadingHistory: false,
             historyError: null,

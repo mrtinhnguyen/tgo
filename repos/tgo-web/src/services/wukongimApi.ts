@@ -436,6 +436,13 @@ export class WuKongIMUtils {
       typedPayload = { type: MessagePayloadType.TEXT, content };
     }
 
+    // Determine if this is a streaming message that's still in progress
+    // A message is streaming if:
+    // 1. It has stream_data (indicating it's a stream message)
+    // 2. end field is not 1 (end=1 means streaming finished)
+    const hasStreamData = !!(wkMessage.stream_data && wkMessage.stream_data.trim() !== '');
+    const isStreamingInProgress = hasStreamData && wkMessage.end !== 1;
+
     const convertedMessage: Message = {
       id: idStr,
       content,
@@ -455,7 +462,8 @@ export class WuKongIMUtils {
       metadata: {
         sender_avatar: (wkMessage as any).sender_avatar,
         is_read: false,
-        has_stream_data: !!(wkMessage.stream_data && wkMessage.stream_data.trim() !== ''),
+        has_stream_data: hasStreamData,
+        is_streaming: isStreamingInProgress, // Flag for UI to show loading cursor
         ...imageMeta,
         ...fileMeta,
         ...(richImagesMeta ? { images: richImagesMeta } : {}),

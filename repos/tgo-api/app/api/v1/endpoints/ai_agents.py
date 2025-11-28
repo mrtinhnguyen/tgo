@@ -133,6 +133,11 @@ async def create_agent(
             raise HTTPException(status_code=404, detail="AIProvider not found for current project")
         payload["llm_provider_id"] = str(ai_provider_id)
 
+    # Use project's default team_id if not provided in request
+    if "team_id" not in payload or payload.get("team_id") is None:
+        if project.default_team_id:
+            payload["team_id"] = project.default_team_id
+
     result = await ai_client.create_agent(
         project_id=str(project.id),
         agent_data=payload,

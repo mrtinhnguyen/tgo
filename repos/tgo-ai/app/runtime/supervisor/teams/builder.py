@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import uuid
 
 from agno.team import Team
@@ -45,11 +45,33 @@ class AgnoTeamBuilder:
 
     async def build_team(self, context: CoordinationContext) -> BuiltTeam:
         """Construct an agno Team for the given coordination context."""
+        # Build team members
+        members, agent_roles, agent_names = await self._build_members(context)
+        # Resolve team model
+        team_model = self._resolve_team_model(context, members)
+
+        # Build team kwargs
+        team_kwargs = self._build_team_kwargs(context, members, team_model)
+
+        # Inject team-level tools
+        team_kwargs["tools"] = self._build_team_tools(context)
+
+        # Setup memory if enabled
+        self._setup_memory(context, members, team_kwargs)
+
+        return BuiltTeam(
+            team=Team(**team_kwargs),
+            agent_roles=agent_roles,
+            agent_names=agent_names,
+        )
+
+    async def _build_members(
+        self, context: CoordinationContext
+    ) -> tuple[List[Agent], Dict[str, str], Dict[str, str]]:
+        """Build all team member agents."""
+        members: List[Agent] = []
         agent_roles: Dict[str, str] = {}
         agent_names: Dict[str, str] = {}
-
-        members: List[Agent] = []
-
         for internal_agent in context.team.agents:
             member_agent = await self._create_member_agent(
                 internal_agent,
@@ -61,21 +83,35 @@ class AgnoTeamBuilder:
             agent_roles[member_agent.id] = "member"
             agent_names[member_agent.id] = member_agent.name or "Team Member"
 
-        team_model = None
+        return members, agent_roles, agent_names
+
+    def _resolve_team_model(
+        self, context: CoordinationContext, members: List[Agent]
+    ) -> Optional[Any]:
+        """Resolve the team's LLM model, falling back to first member's model."""
         if context.team.model:
             try:
-                team_model = self._agent_builder.resolve_model_instance(
+                return self._agent_builder.resolve_model_instance(
                     AgentConfig(
                         model_name=context.team.model,
                         provider_credentials=context.team.llm_provider_credentials,
                     )
                 )
             except InvalidConfigurationError:
-                team_model = None
+                pass
 
-        if team_model is None and members:
-            team_model = getattr(members[0], "model", None)
-        team_kwargs: Dict[str, Any] = {
+        # Fallback to first member's model
+        return getattr(members[0], "model", None) if members else None
+
+    def _build_team_kwargs(
+        self,
+        context: CoordinationContext,
+        members: List[Agent],
+        team_model: Optional[Any],
+    ) -> Dict[str, Any]:
+        """Build the kwargs dict for Team instantiation."""
+        self._logger.debug("Building team kwargs", team_model=str(team_model))
+        return {
             "members": members,
             "name": context.team.name or "Supervisor Coordination Team",
             "role": "Coordinator",
@@ -97,95 +133,80 @@ class AgnoTeamBuilder:
             "add_memories_to_context": context.enable_memory,
             "add_history_to_context": True,
             "num_history_runs": 5,
-            "metadata": {
-                "team_id": str(context.team.id),
-            },
+            "metadata": {"team_id": str(context.team.id)},
         }
 
-        # Inject team-level tools (do not inject into members)
+    def _build_team_tools(self, context: CoordinationContext) -> List[Any]:
+        """Build team-level tools with graceful error handling."""
+        tools: List[Any] = []
+        tool_context = {
+            "team_id": str(context.team.id),
+            "session_id": context.session_id,
+            "user_id": context.user_id,
+            "project_id": context.project_id,
+        }
+
+        # Tool creators with their names for logging
+        tool_creators: List[tuple[str, Callable]] = [
+            ("handoff", self._create_handoff_tool),
+            ("customer_info", self._create_customer_info_tool),
+            ("customer_sentiment", self._create_customer_sentiment_tool),
+        ]
+
+        for tool_name, creator in tool_creators:
+            tool = creator(tool_context)
+            if tool is not None:
+                tools.append(tool)
+
+        return tools
+
+    def _create_handoff_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
+        """Create handoff tool with error handling."""
         try:
             from app.runtime.tools.custom.handoff import create_handoff_tool
-
-            tools_list = []
-            handoff_tool = create_handoff_tool(
-                team_id=str(context.team.id),
-                session_id=context.session_id,
-                user_id=context.user_id,
-                project_id=context.project_id,
-            )
-            tools_list.append(handoff_tool)
-
-            # Try to add customer info tool; if it fails, keep proceeding with others
-            try:
-                from app.runtime.tools.custom.customer_info import create_customer_info_tool
-
-                customer_info_tool = create_customer_info_tool(
-                    team_id=str(context.team.id),
-                    session_id=context.session_id,
-                    user_id=context.user_id,
-                    project_id=context.project_id,
-                )
-                tools_list.append(customer_info_tool)
-            except Exception as exc2:  # noqa: BLE001
-                self._logger.warning(
-                    "Failed to add customer info tool; continuing without it",
-                    error=str(exc2),
-                )
-
-            # Try to add customer sentiment tool; if it fails, keep proceeding with others
-            try:
-                from app.runtime.tools.custom.customer_sentiment import create_customer_sentiment_tool
-
-                customer_sentiment_tool = create_customer_sentiment_tool(
-                    team_id=str(context.team.id),
-                    session_id=context.session_id,
-                    user_id=context.user_id,
-                    project_id=context.project_id,
-                )
-                tools_list.append(customer_sentiment_tool)
-            except Exception as exc3:  # noqa: BLE001
-                self._logger.warning(
-                    "Failed to add customer sentiment tool; continuing without it",
-                    error=str(exc3),
-                )
-
-            team_kwargs["tools"] = tools_list
+            return create_handoff_tool(**ctx)
         except Exception as exc:  # noqa: BLE001
-            # Keep backward compatibility: if tool setup fails, continue silently
+            self._logger.warning("Failed to add handoff tool", error=str(exc))
+            return None
+
+    def _create_customer_info_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
+        """Create customer info tool with error handling."""
+        try:
+            from app.runtime.tools.custom.customer_info import create_customer_info_tool
+            return create_customer_info_tool(**ctx)
+        except Exception as exc:  # noqa: BLE001
+            self._logger.warning("Failed to add customer info tool", error=str(exc))
+            return None
+
+    def _create_customer_sentiment_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
+        """Create customer sentiment tool with error handling."""
+        try:
+            from app.runtime.tools.custom.customer_sentiment import create_customer_sentiment_tool
+            return create_customer_sentiment_tool(**ctx)
+        except Exception as exc:  # noqa: BLE001
+            self._logger.warning("Failed to add customer sentiment tool", error=str(exc))
+            return None
+
+    def _setup_memory(
+        self,
+        context: CoordinationContext,
+        members: List[Agent],
+        team_kwargs: Dict[str, Any],
+    ) -> None:
+        """Setup memory backend if enabled."""
+        if not context.enable_memory or not members:
+            return
+
+        try:
+            memory_manager, memory_db = self._agent_builder.get_memory_backend(
+                members[0].model
+            )
+            team_kwargs.update(db=memory_db, memory_manager=memory_manager)
+        except InvalidConfigurationError as exc:
             self._logger.warning(
-                "Failed to add team-level tools; continuing without them",
+                "Memory backend unavailable; continuing without persistence",
                 error=str(exc),
             )
-
-
-        if context.enable_memory and members:
-            try:
-                memory_manager, memory_db = self._agent_builder.get_memory_backend(members[0].model)
-                team_kwargs.update(
-                    db=memory_db,
-                    memory_manager=memory_manager,
-                )
-            except InvalidConfigurationError as exc:
-                # Log and continue without persistent memory to maintain backward compatibility
-                self._logger.warning(
-                    "Memory backend unavailable; continuing without persistence",
-                    error=str(exc),
-                )
-
-        team = Team(**team_kwargs)
-
-        if not members:
-            return BuiltTeam(
-                team=team,
-                agent_roles={},
-                agent_names={},
-            )
-
-        return BuiltTeam(
-            team=team,
-            agent_roles=agent_roles,
-            agent_names=agent_names,
-        )
 
     async def _create_member_agent(
         self,

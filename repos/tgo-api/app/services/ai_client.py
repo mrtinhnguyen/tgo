@@ -268,6 +268,7 @@ class AIServiceClient:
         project_id: str,
         *,
         team_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
@@ -284,6 +285,8 @@ class AIServiceClient:
         }
         if team_id:
             payload["team_id"] = team_id
+        if agent_id:
+            payload["agent_id"] = agent_id
         if session_id:
             payload["session_id"] = session_id
         if user_id:

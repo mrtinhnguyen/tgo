@@ -65,9 +65,10 @@ async def _handle_ai_response(evt: Dict[str, Any]) -> None:
     """Handle messages from tgo.ai.responses (streaming AI events)."""
     session_id: str = str(evt.get("session_id") or "")
     client_msg_no: Optional[str] = evt.get("client_msg_no")
+    recv_client_msg_no: Optional[str] = evt.get("recv_client_msg_no")
     event_type: str = str(evt.get("event_type") or "")
     data: Dict[str, Any] = evt.get("data") or {}
-    from_uid: Optional[str] = evt.get("from_uid")  # visitor uid
+    from_uid: Optional[str] = evt.get("from_uid") 
     channel_id: Optional[str] = evt.get("channel_id")
     channel_type: int = evt.get("channel_type") or 0
 
@@ -75,26 +76,28 @@ async def _handle_ai_response(evt: Dict[str, Any]) -> None:
         f"WuKong forwarder: Handling AI response {event_type}",
     )
 
+    print("evt---->",evt)
+
     try:
         if event_type == "team_run_started":
             await wukong_client.send_event(
                 channel_id=channel_id,
                 channel_type=channel_type,
                 event_type="___TextMessageStart",
-                data='{"type":1,"content":"思考中..."}',
-                client_msg_no=client_msg_no,
+                data='{"type":100}',
+                client_msg_no=recv_client_msg_no,
                 from_uid=from_uid,
                 force=True,
             )
-        elif event_type == "team_run_content":
-            chunk_text = data.get("content")
+        elif event_type == "team_run_content" or event_type == "team_member_content":
+            chunk_text = data.get("content") or data.get("content_chunk")
             if chunk_text is not None:
                 await wukong_client.send_event(
                     channel_id=channel_id,
                     channel_type=channel_type,
                     event_type="___TextMessageContent",
                     data=str(chunk_text),
-                    client_msg_no=client_msg_no,
+                    client_msg_no=recv_client_msg_no,
                     from_uid=from_uid,
                 )
         elif event_type == "workflow_completed":
@@ -103,7 +106,7 @@ async def _handle_ai_response(evt: Dict[str, Any]) -> None:
                 channel_type=channel_type,
                 data="",
                 event_type="___TextMessageEnd",
-                client_msg_no=client_msg_no,
+                client_msg_no=recv_client_msg_no,
                 from_uid=from_uid,
             )
     except Exception as exc:  # pragma: no cover

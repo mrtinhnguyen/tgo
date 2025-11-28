@@ -37,9 +37,9 @@ class Team(BaseModel):
         comment="Team name",
     )
 
-    model: Mapped[str] = mapped_column(
+    model: Mapped[Optional[str]] = mapped_column(
         String(150),
-        nullable=False,
+        nullable=True,
         comment='LLM model used by the team in format "provider:model_name"',
     )
 

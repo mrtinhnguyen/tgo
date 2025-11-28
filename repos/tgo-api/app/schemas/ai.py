@@ -242,8 +242,8 @@ class TeamResponse(BaseSchema):
         description="Team name",
         examples=["Customer Support Team"]
     )
-    model: str = Field(
-        ...,
+    model: Optional[str] = Field(
+        None,
         max_length=150,
         description="LLM model name (no provider prefix)",
         examples=["gpt-4", "claude-3-sonnet-20240229"]
@@ -466,8 +466,8 @@ class AgentResponse(BaseSchema):
         description="Agent system instruction",
         examples=["You are a helpful customer support agent..."]
     )
-    model: str = Field(
-        ...,
+    model: Optional[str] = Field(
+        None,
         max_length=150,
         description="LLM model name (no provider prefix)",
         examples=["gpt-4", "claude-3-sonnet-20240229"]

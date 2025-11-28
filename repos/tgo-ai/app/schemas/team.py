@@ -16,10 +16,11 @@ class TeamBase(BaseSchema):
         description="Team name",
         examples=["Customer Support Team"],
     )
-    model: str = Field(
+    model: Optional[str] = Field(
+        default=None,
         max_length=150,
-        description="LLM model in 'provider:model_name' format",
-        examples=["anthropic:claude-3-sonnet-20240229"],
+        description="LLM model",
+        examples=["claude-3-sonnet-20240229"],
     )
     instruction: Optional[str] = Field(
         default=None,
@@ -42,12 +43,6 @@ class TeamBase(BaseSchema):
         description="Whether this should be the default team (only one per project)",
     )
 
-    @field_validator("model")
-    @classmethod
-    def validate_model_format(cls, v: str) -> str:
-        if ":" not in v:
-            raise ValueError("Model must be in 'provider:model_name' format")
-        return v
 
 
 
@@ -72,7 +67,7 @@ class TeamUpdate(BaseSchema):
     model: Optional[str] = Field(
         default=None,
         max_length=150,
-        description="Updated LLM model in 'provider:model_name' format",
+        description="Updated LLM model",
     )
     instruction: Optional[str] = Field(
         default=None,
@@ -96,14 +91,6 @@ class TeamUpdate(BaseSchema):
         description="Updated LLM provider (credentials) ID",
     )
 
-    @field_validator("model")
-    @classmethod
-    def validate_model_format(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        if ":" not in v:
-            raise ValueError("Model must be in 'provider:model_name' format")
-        return v
 
 
 

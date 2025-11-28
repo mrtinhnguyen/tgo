@@ -105,7 +105,13 @@ const ChatWindow: React.FC<ChatWindowProps> = React.memo(({ activeChat, onSendMe
     onSendMessage?.(suggestion);
   }, [onSendMessage]);
 
+  // Check if current chat is an agent chat or team chat
+  const isAgentChat = channelId?.endsWith('-agent') ?? false;
+  const isTeamChat = channelId?.endsWith('-team') ?? false;
+  const isAIChat = isAgentChat || isTeamChat;
+
   // Enhanced message sending with platform-aware flow (REST first for non-website, then WebSocket)
+  // For agent/team chats, use REST API instead of WebSocket
   const handleSendMessage = useCallback(async (message: string): Promise<void> => {
     if (!message.trim()) {
       console.warn('Cannot send empty message');
@@ -138,6 +144,42 @@ const ChatWindow: React.FC<ChatWindowProps> = React.memo(({ activeChat, onSendMe
         addMessage(localMessage);
         updateConversationLastMessage(channelId, channelType, localMessage);
         moveConversationToTop(channelId, channelType);
+
+        // Agent/Team chat: use REST API (/v1/chat/team) instead of WebSocket
+        if (isAIChat) {
+          try {
+            let response;
+            if (isAgentChat) {
+              // Extract agent_id from channelId (format: {agent_id}-agent)
+              const agentId = channelId.replace(/-agent$/, '');
+              response = await chatMessagesApiService.staffTeamChat({
+                agent_id: agentId,
+                message: message.trim(),
+              });
+            } else {
+              // Extract team_id from channelId (format: {team_id}-team)
+              const teamId = channelId.replace(/-team$/, '');
+              response = await chatMessagesApiService.staffTeamChat({
+                team_id: teamId,
+                message: message.trim(),
+              });
+            }
+            // Update message metadata to mark as successfully sent
+            updateMessageByClientMsgNo(nowId, {
+              metadata: { ws_sent: true, ws_send_error: false, client_msg_no: response.client_msg_no } as any
+            });
+            onSendMessage?.(message);
+          } catch (e: any) {
+            const errorKey = isAgentChat ? 'chat.send.agentErrorLog' : 'chat.send.teamErrorLog';
+            const errorDefault = isAgentChat ? '智能体消息发送失败' : '团队消息发送失败';
+            console.error(t(errorKey, errorDefault), e);
+            const apiMsg = e?.message || t(isAgentChat ? 'chat.send.agentError' : 'chat.send.teamError', errorDefault + '，请稍后重试');
+            updateMessageByClientMsgNo(nowId, { metadata: { ws_send_error: true, error_text: apiMsg } as any });
+            showApiError(showToast, e);
+          }
+          return;
+        }
+
         // If non-website platform, send via REST first
         if (platformType && platformType !== PlatformType.WEBSITE) {
           try {
@@ -177,7 +219,7 @@ const ChatWindow: React.FC<ChatWindowProps> = React.memo(({ activeChat, onSendMe
     } finally {
       setIsSending(false);
     }
-  }, [isWuKongIMChat, channelId, channelType, isConnected, user, addMessage, updateConversationLastMessage, moveConversationToTop, platformType, onSendMessage, sendWsMessage, updateMessageByClientMsgNo]);
+  }, [isWuKongIMChat, channelId, channelType, isConnected, isAIChat, isAgentChat, user, addMessage, updateConversationLastMessage, moveConversationToTop, platformType, onSendMessage, sendWsMessage, updateMessageByClientMsgNo, showToast, t]);
 
   // Handle empty state when no chat is selected
   if (!activeChat) {

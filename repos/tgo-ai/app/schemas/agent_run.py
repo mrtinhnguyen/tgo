@@ -42,6 +42,10 @@ class SupervisorRunRequest(BaseSchema):
         default=None,
         description="UUID of the team to coordinate agents from (defaults to the project's default team if omitted)",
     )
+    agent_id: Optional[str] = Field(
+        default=None,
+        description="UUID of a specific agent to use. If set, the team will only contain this agent",
+    )
     message: str = Field(
         description="User message to be processed by the agents",
         min_length=1,

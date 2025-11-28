@@ -128,6 +128,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
   // Subscribe to activeChat to focus when switching conversations
   const activeChat = useChatStore(chatSelectors.activeChat);
+  const isStreamingInProgress = useChatStore(state => state.isStreamingInProgress);
 
   // Detect user's platform for keyboard shortcut hints
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -187,6 +188,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
   // AI toggle integration
   const channelId = activeChat?.channelId;
   const channelType = activeChat?.channelType;
+  
+  // 判断是否是 agent 会话（channelId 以 -agent 结尾）或 team 会话（channelId 以 -team 结尾）
+  const isAgentChat = channelId?.endsWith('-agent') ?? false;
+  const isTeamChat = channelId?.endsWith('-team') ?? false;
+  const isAIChat = isAgentChat || isTeamChat;
+  
   const channelInfo = useChannelStore(state =>
     channelId && typeof channelType === 'number'
       ? state.getChannel(channelId, channelType)
@@ -196,14 +203,17 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const visitorId = visitorExtra?.id;
   const isAIDisabled = visitorExtra?.ai_disabled ?? false;
   const isAIEnabled = !isAIDisabled;
-  const isManualDisabled = isAIEnabled;
+  // agent/team 会话时不禁用手动输入
+  // 流消息进行中时禁用输入
+  const isManualDisabled = isAIChat ? false : isAIEnabled;
+  const isInputDisabled = isManualDisabled || isStreamingInProgress;
   const { showToast, showError } = useToast();
   useEffect(() => {
-    if (isManualDisabled) {
+    if (isInputDisabled) {
       setShowEmoji(false);
       setShowScreenshotTip(false);
     }
-  }, [isManualDisabled]);
+  }, [isInputDisabled]);
 
   const [isTogglingAI, setIsTogglingAI] = useState(false);
   // Image upload & send (WeChat-like)
@@ -239,14 +249,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
   }, []);
 
   const handleClickImageBtn = useCallback(() => {
-    if (isManualDisabled) return;
+    if (isInputDisabled) return;
     fileInputRef.current?.click();
-  }, [isManualDisabled]);
+  }, [isInputDisabled]);
 
   const handleClickFileBtn = useCallback(() => {
-    if (isManualDisabled) return;
+    if (isInputDisabled) return;
     fileDocInputRef.current?.click();
-  }, [isManualDisabled]);
+  }, [isInputDisabled]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const filesList = e.target.files;
@@ -477,7 +487,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
 
   const handleSend = async (): Promise<void> => {
-    if (isManualDisabled) return;
+    if (isInputDisabled) return;
     if (isSending || isSendingLocal) return;
 
     const hasImages = pastedItems.length > 0;
@@ -518,7 +528,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (isManualDisabled) {
+    if (isInputDisabled) {
       e.preventDefault();
       return;
     }
@@ -587,7 +597,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   }, [message]);
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (isManualDisabled) { e.preventDefault(); return; }
+    if (isInputDisabled) { e.preventDefault(); return; }
     const cd = e.clipboardData;
     if (!cd) return;
     const items = Array.from(cd.items).filter(it => it.kind === 'file' && it.type && it.type.startsWith('image/'));
@@ -637,7 +647,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     if (newItems.length) {
       setPastedItems(prev => [...prev, ...newItems]);
     }
-  }, [pastedItems, getImageDimensions, showError, isManualDisabled]);
+  }, [pastedItems, getImageDimensions, showError, isInputDisabled]);
 
   // Cleanup preview URLs on unmount or when items change
   useEffect(() => {
@@ -1110,28 +1120,28 @@ const MessageInput: React.FC<MessageInputProps> = ({
         <div className="flex items-center space-x-3">
           <button
             ref={emojiBtnRef}
-            onClick={() => { if (isManualDisabled) return; setShowEmoji(v => !v); }}
-            disabled={isManualDisabled}
+            onClick={() => { if (isInputDisabled) return; setShowEmoji(v => !v); }}
+            disabled={isInputDisabled}
             className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={t('chat.input.emoji.aria', '打开表情选择器')}
-            title={isManualDisabled ? t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用') : t('chat.input.emoji.title', '插入表情')}
+            title={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.tooltip', '流消息进行中，请稍候...') : t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用')) : t('chat.input.emoji.title', '插入表情')}
           >
             <Smile className="w-6 h-6" />
           </button>
           <button
             ref={screenshotBtnRef}
-            onClick={() => { if (isManualDisabled) return; handleClickScreenshotBtn(); }}
-            disabled={isManualDisabled}
+            onClick={() => { if (isInputDisabled) return; handleClickScreenshotBtn(); }}
+            disabled={isInputDisabled}
             className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label={t('chat.input.screenshot.aria', '截图粘贴说明')}
-            title={isManualDisabled ? t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用') : t('chat.input.screenshot.title', '截图')}
+            title={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.tooltip', '流消息进行中，请稍候...') : t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用')) : t('chat.input.screenshot.title', '截图')}
           >
             <Scissors className="w-6 h-6" />
           </button>
-          <button onClick={handleClickImageBtn} disabled={isManualDisabled} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" aria-label={t('chat.input.image.aria', '上传图片')} title={isManualDisabled ? t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用') : t('chat.input.image.title', '发送图片')}>
+          <button onClick={handleClickImageBtn} disabled={isInputDisabled} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" aria-label={t('chat.input.image.aria', '上传图片')} title={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.tooltip', '流消息进行中，请稍候...') : t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用')) : t('chat.input.image.title', '发送图片')}>
             <ImageIcon className="w-6 h-6" />
           </button>
-          <button onClick={handleClickFileBtn} disabled={isManualDisabled} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" aria-label={t('chat.input.file.aria', '上传文件')} title={isManualDisabled ? t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用') : t('chat.input.file.title', '发送文件')}>
+          <button onClick={handleClickFileBtn} disabled={isInputDisabled} className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" aria-label={t('chat.input.file.aria', '上传文件')} title={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.tooltip', '流消息进行中，请稍候...') : t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用')) : t('chat.input.file.title', '发送文件')}>
             <Folder className="w-6 h-6" />
           </button>
           {/* <button className="p-1.5 text-gray-500 hover:text-gray-700 transition-colors duration-200">
@@ -1140,7 +1150,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </div>
 
       {/* Hidden file input for image selection */}
-      <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageChange} disabled={isManualDisabled} />
+      <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageChange} disabled={isInputDisabled} />
 
       {/* Hidden file input for document/file selection */}
       <input
@@ -1150,18 +1160,21 @@ const MessageInput: React.FC<MessageInputProps> = ({
         multiple
         className="hidden"
         onChange={handleFileChange}
-        disabled={isManualDisabled}
+        disabled={isInputDisabled}
       />
 
-        <div className="flex items-center space-x-2" title={isAIEnabled ? t('chat.input.ai.enabled', 'AI已启用') : t('chat.input.ai.disabled', 'AI已禁用')}>
-          <span className="text-xs text-gray-600 dark:text-gray-400 select-none">{t('chat.input.ai.label', 'AI助手')}</span>
-          <Toggle
-            aria-label={t('chat.input.ai.toggleAria', '切换AI助手')}
-            checked={isAIEnabled}
-            onChange={handleChangeAI}
-            disabled={!visitorId || isTogglingAI}
-          />
-        </div>
+        {/* AI 助手开关 - agent/team 会话时不显示 */}
+        {!isAIChat && (
+          <div className="flex items-center space-x-2" title={isAIEnabled ? t('chat.input.ai.enabled', 'AI已启用') : t('chat.input.ai.disabled', 'AI已禁用')}>
+            <span className="text-xs text-gray-600 dark:text-gray-400 select-none">{t('chat.input.ai.label', 'AI助手')}</span>
+            <Toggle
+              aria-label={t('chat.input.ai.toggleAria', '切换AI助手')}
+              checked={isAIEnabled}
+              onChange={handleChangeAI}
+              disabled={!visitorId || isTogglingAI}
+            />
+          </div>
+        )}
       </div>
 
       {showEmoji && (
@@ -1299,7 +1312,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       <div className="mt-2">
         <textarea
           ref={textareaRef}
-          placeholder={isManualDisabled ? t('chat.input.disabled.placeholder', 'AI助手已启用，无法手动输入') : t('chat.input.placeholder', '输入消息...')}
+          placeholder={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.placeholder', '流消息进行中，请稍候...') : t('chat.input.disabled.placeholder', 'AI助手已启用，无法手动输入')) : t('chat.input.placeholder', '输入消息...')}
           rows={2}
           value={message}
           onChange={handleMessageChange}
@@ -1307,23 +1320,23 @@ const MessageInput: React.FC<MessageInputProps> = ({
           onPaste={handlePaste}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
-          readOnly={isSending || isSendingLocal || isManualDisabled}
-          disabled={isManualDisabled}
-          title={isManualDisabled ? t('chat.input.disabled.placeholder', 'AI助手已启用，无法手动输入') : undefined}
+          readOnly={isSending || isSendingLocal || isInputDisabled}
+          disabled={isInputDisabled}
+          title={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.placeholder', '流消息进行中，请稍候...') : t('chat.input.disabled.placeholder', 'AI助手已启用，无法手动输入')) : undefined}
           className={`w-full text-sm p-2 border border-transparent rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-blue-400 resize-none bg-transparent dark:text-gray-200 ${
-            isSending || isSendingLocal || isManualDisabled ? 'opacity-50 cursor-not-allowed' : ''
+            isSending || isSendingLocal || isInputDisabled ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         />
       </div>
 
       {/* Send controls */}
       <div className="flex justify-end mt-1">
-        <button className="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 mr-2" title={isManualDisabled ? t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用') : undefined}>
+        <button className="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 mr-2" title={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.tooltip', '流消息进行中，请稍候...') : t('chat.input.disabled.tooltip', 'AI助手已启用，手动输入已禁用')) : undefined}>
           {t('chat.input.shortcuts.sendWithHint', 'Enter 发送 • {{hint}}', { hint: newlineHint })}
         </button>
         <button
           className={`px-4 py-1 text-white text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-1 transition-colors duration-200 ${
-            isSending || isSendingLocal || isManualDisabled
+            isSending || isSendingLocal || isInputDisabled
               ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
               : (message.trim() || pastedItems.length > 0 || selectedFiles.length > 0)
               ? 'bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700'
@@ -1331,8 +1344,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
           }`}
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleSend}
-          disabled={(!message.trim() && pastedItems.length === 0 && selectedFiles.length === 0) || isSending || isSendingLocal || isManualDisabled}
-          title={isManualDisabled ? t('chat.input.disabled.cannotSendTooltip', 'AI助手已启用，无法手动发送') : undefined}
+          disabled={(!message.trim() && pastedItems.length === 0 && selectedFiles.length === 0) || isSending || isSendingLocal || isInputDisabled}
+          title={isInputDisabled ? (isStreamingInProgress ? t('chat.input.streaming.cannotSendTooltip', '流消息进行中，请等待完成后再发送') : t('chat.input.disabled.cannotSendTooltip', 'AI助手已启用，无法手动发送')) : undefined}
         >
           {isSending || isSendingLocal ? t('chat.input.send.sending', '发送中...') : t('chat.input.send.label', '发送')}
         </button>

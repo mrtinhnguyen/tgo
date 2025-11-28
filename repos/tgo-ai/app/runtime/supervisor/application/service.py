@@ -302,6 +302,13 @@ class SupervisorRuntimeService:
             async with AIServiceClient(team_service, project_id) as ai_client:
                 team = await ai_client.get_team_with_agents(team_id, headers)
 
+        # Filter to single agent if agent_id is specified
+        if payload.agent_id:
+            filtered_agents = [a for a in team.agents if str(a.id) == payload.agent_id]
+            if not filtered_agents:
+                raise ValueError(f"Agent {payload.agent_id} not found in team {team_id}")
+            team = team.model_copy(update={"agents": filtered_agents})
+
         context = self._build_coordination_context(
             effective_payload,
             team,

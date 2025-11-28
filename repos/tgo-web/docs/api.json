@@ -5785,6 +5785,97 @@
         }
       }
     },
+    "/v1/ai/teams/default": {
+      "get": {
+        "tags": [
+          "AI Teams"
+        ],
+        "summary": "Get Default Team",
+        "description": "Get the default team for the authenticated project.\n    \n    Returns the team marked as default for this project, including associated agents\n    with their tools and collections. Returns 404 if no default team is configured.",
+        "operationId": "get_default_team_v1_ai_teams_default_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "include_agents",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include associated agents with tools and collections in the response",
+              "default": true,
+              "title": "Include Agents"
+            },
+            "description": "Include associated agents with tools and collections in the response"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamWithDetailsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid request data or parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Access denied to resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found - Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ai/teams": {
       "get": {
         "tags": [
@@ -7643,7 +7734,7 @@
           "Chat"
         ],
         "summary": "OpenAI-compatible chat completion",
-        "description": "OpenAI ChatGPT API-compatible chat completion endpoint.\n\n    This endpoint provides a fully compatible interface with OpenAI's ChatGPT API,\n    allowing seamless integration with existing OpenAI client libraries and tools.\n\n    **Authentication**: Use Platform API Key via `X-Platform-API-Key` header.\n\n    **Request Format**: Compatible with OpenAI's chat completion request format.\n    See: https://platform.openai.com/docs/api-reference/chat/create\n\n    **Response Format**: Compatible with OpenAI's chat completion response format.\n    See: https://platform.openai.com/docs/api-reference/chat/object\n\n    **Streaming Support**: Set `stream=true` to receive Server-Sent Events (SSE).\n    See: https://platform.openai.com/docs/api-reference/chat/streaming\n\n    **Differences from `/completion` endpoint**:\n    - Uses OpenAI-compatible request/response format\n    - Supports standard OpenAI parameters (temperature, max_tokens, etc.)\n    - Returns structured response with usage statistics\n    - Supports both streaming and non-streaming modes\n\n    **Internal Processing**:\n    - Converts OpenAI format to internal message format\n    - Publishes to Kafka for AI processing\n    - Waits for AI response and converts back to OpenAI format",
+        "description": "OpenAI ChatGPT API-compatible chat completion endpoint.\n\n    This endpoint provides a fully compatible interface with OpenAI's ChatGPT API,\n    allowing seamless integration with existing OpenAI client libraries and tools.\n\n    **Authentication**: Use Platform API Key via `X-Platform-API-Key` header.\n\n    **Request Format**: Compatible with OpenAI's chat completion request format.\n    See: https://platform.openai.com/docs/api-reference/chat/create\n\n    **Response Format**: Compatible with OpenAI's chat completion response format.\n    See: https://platform.openai.com/docs/api-reference/chat/object\n\n    **Streaming Support**: Set `stream=true` to receive Server-Sent Events (SSE).\n    See: https://platform.openai.com/docs/api-reference/chat/streaming",
         "operationId": "chat_completion_openai_compatible_v1_chat_completions_post",
         "parameters": [
           {
@@ -7690,13 +7781,61 @@
         }
       }
     },
+    "/v1/chat/team": {
+      "post": {
+        "tags": [
+          "Chat",
+          "Chat"
+        ],
+        "summary": "Staff chat with AI team or agent",
+        "description": "Staff-to-team/agent chat endpoint.\n\n    This endpoint allows authenticated staff members to chat with AI teams or agents.\n    The AI response is delivered via WuKongIM to the client.\n\n    **Authentication**: JWT token required (staff authentication).\n\n    **Request**: Either `team_id` or `agent_id` must be provided (exactly one).\n\n    **Channel Format**:\n    - If `team_id` is provided: channel_id = `{team_id}-team`\n    - If `agent_id` is provided: channel_id = `{agent_id}-agent`\n\n    **Response Delivery**: AI response is sent via WuKongIM, not returned in this endpoint.\n    This endpoint only returns success/failure status after publishing to Kafka.",
+        "operationId": "staff_team_chat_v1_chat_team_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffTeamChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffTeamChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/v1/channels/info": {
       "get": {
         "tags": [
           "Channels"
         ],
         "summary": "Get Channel Info",
-        "description": "Retrieve channel information for a given channel_id and channel_type.\n\nSecurity:\n- JWT staff: access to channels within the same project (existing behavior)\n- Platform API key: only staff personal channels (channel_type==1 and channel_id endswith '-staff'),\n  and only within the same project as the platform",
+        "description": "Retrieve channel information for a given channel_id and channel_type.\n\nSecurity:\n- JWT staff: access to channels within the same project (existing behavior)\n- Platform API key: only staff/agent personal channels (channel_type==1 and channel_id endswith '-staff' or '-agent'),\n  and only within the same project as the platform",
         "operationId": "get_channel_info_v1_channels_info_get",
         "security": [
           {
@@ -7776,23 +7915,7 @@
                         "id": "550e8400-e29b-41d4-a716-446655440000",
                         "platform_id": "00000000-0000-0000-0000-000000000001",
                         "platform_type": "website",
-                        "platform_open_id": "visitor_open_id_123",
                         "name": "Jane Doe",
-                        "nickname": "jane",
-                        "avatar_url": "https://cdn.example.com/avatars/jane.png",
-                        "phone_number": "+1-555-0100",
-                        "email": "jane@example.com",
-                        "company": "Example Inc.",
-                        "job_title": "Engineer",
-                        "source": "landing_page",
-                        "note": "High intent",
-                        "custom_attributes": {
-                          "plan": "pro"
-                        },
-                        "created_at": "2024-01-01T12:00:00Z",
-                        "updated_at": "2024-01-10T08:30:00Z",
-                        "first_visit_time": "2024-01-01T12:00:00Z",
-                        "last_visit_time": "2024-01-10T08:00:00Z",
                         "is_online": true
                       }
                     }
@@ -7812,6 +7935,28 @@
                       }
                     }
                   },
+                  "Personal Channel - Agent": {
+                    "summary": "Personal Channel - Agent",
+                    "value": {
+                      "name": "Customer Support Agent",
+                      "avatar": "",
+                      "channel_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab-agent",
+                      "channel_type": 1,
+                      "entity_type": "agent",
+                      "extra": {
+                        "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                        "name": "Customer Support Agent",
+                        "instruction": "You are a helpful customer support agent...",
+                        "model": "gpt-4",
+                        "is_default": true,
+                        "config": {
+                          "temperature": 0.7
+                        },
+                        "tools": [],
+                        "collections": []
+                      }
+                    }
+                  },
                   "Personal Channel - Visitor": {
                     "summary": "Personal Channel - Visitor",
                     "value": {
@@ -7824,20 +7969,7 @@
                         "id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
                         "platform_id": "00000000-0000-0000-0000-000000000002",
                         "platform_type": "wechat",
-                        "platform_open_id": "wx_abc_987",
                         "name": "John Smith",
-                        "nickname": "john",
-                        "avatar_url": "https://cdn.example.com/avatars/john.png",
-                        "email": "john@example.com",
-                        "source": "widget",
-                        "custom_attributes": {
-
-                        },
-                        "created_at": "2024-02-02T09:00:00Z",
-                        "updated_at": "2024-02-05T09:00:00Z",
-                        "first_visit_time": "2024-02-02T09:00:00Z",
-                        "last_visit_time": "2024-02-05T09:00:00Z",
-                        "last_offline_time": "2024-02-05T09:05:00Z",
                         "is_online": false
                       }
                     }
@@ -8713,8 +8845,15 @@
             ]
           },
           "model": {
-            "type": "string",
-            "maxLength": 150,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Model",
             "description": "LLM model name (no provider prefix)",
             "examples": [
@@ -8790,7 +8929,6 @@
         "required": [
           "id",
           "name",
-          "model",
           "created_at",
           "updated_at"
         ],
@@ -9172,8 +9310,15 @@
             ]
           },
           "model": {
-            "type": "string",
-            "maxLength": 150,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Model",
             "description": "LLM model name (no provider prefix)",
             "examples": [
@@ -9265,7 +9410,6 @@
         "required": [
           "id",
           "name",
-          "model",
           "created_at",
           "updated_at"
         ],
@@ -9882,10 +10026,11 @@
             "type": "string",
             "enum": [
               "visitor",
-              "staff"
+              "staff",
+              "agent"
             ],
             "title": "Entity Type",
-            "description": "Entity type represented by this channel: 'visitor' or 'staff'"
+            "description": "Entity type represented by this channel: 'visitor', 'staff', or 'agent'"
           },
           "extra": {
             "anyOf": [
@@ -9898,30 +10043,14 @@
               }
             ],
             "title": "Extra",
-            "description": "Scenario 1 – Customer Service Channel (channel_type == 251):\n- extra contains the complete VisitorResponse as a dictionary. Fields include: id, platform_id, platform_type, platform_open_id, name, nickname, avatar_url, phone_number, email, company, job_title, source, note, custom_attributes, created_at, updated_at, deleted_at, first_visit_time, last_visit_time, last_offline_time, is_online, and any other fields defined by VisitorResponse.\n\nScenario 2 – Personal Channel - Staff (channel_type == 1 AND channel_id ends with '-staff'):\n- extra contains staff metadata as a dictionary with fields: staff_id (UUID string), username (string), role (string, e.g., 'user' or 'agent').\n\nScenario 3 – Personal Channel - Visitor (channel_type == 1 AND channel_id does NOT end with '-staff'):\n- Same as Scenario 1: extra contains the complete VisitorResponse as a dictionary.",
+            "description": "Scenario 1 – Customer Service Channel (channel_type == 251):\n- extra contains the complete VisitorResponse as a dictionary.\n\nScenario 2 – Personal Channel - Staff (channel_type == 1 AND channel_id ends with '-staff'):\n- extra contains staff metadata: staff_id, username, role.\n\nScenario 3 – Personal Channel - Agent (channel_type == 1 AND channel_id ends with '-agent'):\n- extra contains agent metadata from AI service: id, name, instruction, model, is_default, config, team_id, tools, collections.\n\nScenario 4 – Personal Channel - Visitor (channel_type == 1 AND channel_id does NOT end with '-staff' or '-agent'):\n- Same as Scenario 1: extra contains the complete VisitorResponse as a dictionary.",
             "examples": [
               {
-                "avatar_url": "https://cdn.example.com/avatars/jane.png",
-                "company": "Example Inc.",
-                "created_at": "2024-01-01T12:00:00Z",
-                "custom_attributes": {
-                  "plan": "pro"
-                },
-                "email": "jane@example.com",
-                "first_visit_time": "2024-01-01T12:00:00Z",
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "is_online": true,
-                "job_title": "Engineer",
-                "last_visit_time": "2024-01-10T08:00:00Z",
                 "name": "Jane Doe",
-                "nickname": "jane",
-                "note": "High intent",
-                "phone_number": "+1-555-0100",
                 "platform_id": "00000000-0000-0000-0000-000000000001",
-                "platform_open_id": "visitor_open_id_123",
-                "platform_type": "website",
-                "source": "landing_page",
-                "updated_at": "2024-01-10T08:30:00Z"
+                "platform_type": "website"
               },
               {
                 "role": "user",
@@ -9929,24 +10058,12 @@
                 "username": "support.alice"
               },
               {
-                "avatar_url": "https://cdn.example.com/avatars/john.png",
-                "created_at": "2024-02-02T09:00:00Z",
-                "custom_attributes": {
-
-                },
-                "email": "john@example.com",
-                "first_visit_time": "2024-02-02T09:00:00Z",
-                "id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
-                "is_online": false,
-                "last_offline_time": "2024-02-05T09:05:00Z",
-                "last_visit_time": "2024-02-05T09:00:00Z",
-                "name": "John Smith",
-                "nickname": "john",
-                "platform_id": "00000000-0000-0000-0000-000000000002",
-                "platform_open_id": "wx_abc_987",
-                "platform_type": "wechat",
-                "source": "widget",
-                "updated_at": "2024-02-05T09:00:00Z"
+                "collections": [],
+                "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                "is_default": true,
+                "model": "gpt-4",
+                "name": "Customer Support Agent",
+                "tools": []
               }
             ]
           }
@@ -13260,6 +13377,113 @@
         "title": "StaffStatus",
         "description": "Staff status enumeration."
       },
+      "StaffTeamChatRequest": {
+        "properties": {
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id",
+            "description": "AI Team ID to chat with"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id",
+            "description": "AI Agent ID to chat with"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Message content to send"
+          },
+          "system_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Message",
+            "description": "System message/prompt to guide the AI"
+          },
+          "expected_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Output",
+            "description": "Expected output format or description for the AI"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 600,
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds",
+            "description": "Timeout in seconds for AI response",
+            "default": 120
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "StaffTeamChatRequest",
+        "description": "Request payload for staff-to-team/agent chat.\n\nNotes:\n- Either team_id or agent_id must be provided (exactly one)\n- If team_id is provided, channel_id will be {team_id}-team\n- If agent_id is provided, channel_id will be {agent_id}-agent\n- Response is delivered via WuKongIM"
+      },
+      "StaffTeamChatResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Whether the chat completed successfully"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          },
+          "client_msg_no": {
+            "type": "string",
+            "title": "Client Msg No",
+            "description": "Message correlation ID for tracking"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message",
+          "client_msg_no"
+        ],
+        "title": "StaffTeamChatResponse",
+        "description": "Response payload for staff-to-team/agent chat."
+      },
       "StaffUpdate": {
         "properties": {
           "nickname": {
@@ -13766,8 +13990,15 @@
             ]
           },
           "model": {
-            "type": "string",
-            "maxLength": 150,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Model",
             "description": "LLM model name (no provider prefix)",
             "examples": [
@@ -13857,7 +14088,6 @@
         "required": [
           "id",
           "name",
-          "model",
           "created_at",
           "updated_at"
         ],
@@ -13977,8 +14207,15 @@
             ]
           },
           "model": {
-            "type": "string",
-            "maxLength": 150,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Model",
             "description": "LLM model name (no provider prefix)",
             "examples": [
@@ -14076,7 +14313,6 @@
         "required": [
           "id",
           "name",
-          "model",
           "created_at",
           "updated_at"
         ],

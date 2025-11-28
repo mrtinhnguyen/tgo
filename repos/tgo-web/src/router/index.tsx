@@ -84,7 +84,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'chat',
-        element: <ChatPage />
+        element: <ChatPage />,
+        children: [
+          { index: true, element: null },
+          { path: ':channelType/:channelId', element: null }
+        ]
       },
       {
         path: 'ai',

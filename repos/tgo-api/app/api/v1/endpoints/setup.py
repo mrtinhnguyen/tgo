@@ -33,6 +33,7 @@ from app.schemas.setup import (
     SkipLLMConfigResponse,
     VerifySetupResponse,
 )
+from app.services.ai_client import ai_client
 from app.services.wukongim_client import wukongim_client
 from app.utils.const import (
     CHANNEL_TYPE_CUSTOMER_SERVICE,
@@ -169,6 +170,27 @@ async def create_admin(
     # Ensure we have a SystemSetup row and check admin state
     setup = _get_or_create_system_setup(db)
 
+    # Check if admin already exists (idempotent behavior)
+    existing_admin = db.query(Staff).filter(
+        Staff.username == admin_data.username,
+        Staff.deleted_at.is_(None)
+    ).first()
+
+    if existing_admin:
+        # Return existing admin info for idempotency
+        project = existing_admin.project
+        logger.info(
+            f"Admin already exists, returning existing info for idempotency: {existing_admin.username}"
+        )
+        return CreateAdminResponse(
+            id=existing_admin.id,
+            username=existing_admin.username,
+            nickname=existing_admin.nickname,
+            project_id=project.id if project else existing_admin.project_id,
+            project_name=project.name if project else "Unknown",
+            created_at=existing_admin.created_at,
+        )
+
     if setup.is_installed:
         logger.warning(
             f"Attempt to call setup endpoint after installation is complete: {request.url.path}"
@@ -181,25 +203,6 @@ async def create_admin(
             ),
         )
 
-    if setup.admin_created:
-        logger.warning("Attempt to create admin when admin already exists")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin already exists. System setup is complete.",
-        )
-
-    # Check username uniqueness
-    existing_user = db.query(Staff).filter(
-        Staff.username == admin_data.username,
-        Staff.deleted_at.is_(None)
-    ).first()
-
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Username '{admin_data.username}' already exists"
-        )
-
     # Create default project
     api_key = generate_api_key()
     project = Project(
@@ -210,6 +213,38 @@ async def create_admin(
     db.flush()  # Get project ID without committing
 
     logger.info(f"Created default project: {project.name} (ID: {project.id})")
+
+    # Create default AI team for this project (required, will rollback on failure)
+    try:
+        team_data = {
+            "name": "TGO AI Team",
+            "is_default": True,
+        }
+        team_result = await ai_client.create_team(
+            project_id=str(project.id),
+            team_data=team_data,
+        )
+        default_team_id = team_result.get("id")
+        if not default_team_id:
+            raise ValueError("AI service returned empty team ID")
+        project.default_team_id = str(default_team_id)
+        logger.info(
+            "Created default AI team for project",
+            extra={
+                "project_id": str(project.id),
+                "team_id": default_team_id,
+            },
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to create default AI team: {e}",
+            extra={"project_id": str(project.id)},
+        )
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Failed to create default AI team: {e}. Please retry.",
+        )
 
     # Hash password
     password_hash = get_password_hash(admin_data.password)

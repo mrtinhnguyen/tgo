@@ -27,6 +27,7 @@ import TextMessage from './messages/TextMessage';
 import ImageMessage from './messages/ImageMessage';
 import FileMessage from './messages/FileMessage';
 import RichTextMessage from './messages/RichTextMessage';
+import LoadingMessage from './messages/LoadingMessage';
 
 
 
@@ -132,6 +133,14 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSuggestionClick })
   // File message derived state (only need boolean for routing)
   const isFile = (typedPayload?.type === MessagePayloadType.FILE) || message.payloadType === MessagePayloadType.FILE || Boolean(message.metadata?.file_url || (message.metadata as any)?.file_name);
 
+  // Stream loading message (type=100) - AI is starting to generate response
+  // Only show loading if it's a STREAM type AND there's no stream_data content yet
+  const isStreamType = (typedPayload?.type === MessagePayloadType.STREAM) || message.payloadType === MessagePayloadType.STREAM;
+  const hasStreamData = Boolean(message.metadata?.has_stream_data);
+  const hasContent = Boolean(message.content && message.content.trim().length > 0);
+  // Show loading only if it's STREAM type but no content has arrived yet
+  const isStreamLoading = isStreamType && !hasStreamData && !hasContent;
+
 
   if (!isOwnMessage) {
     return (
@@ -176,16 +185,16 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSuggestionClick })
               </div>
             )}
           </div>
-          {isRichText ? (
+          {isStreamLoading ? (
+            <LoadingMessage isStaff={false} />
+          ) : isRichText ? (
             <RichTextMessage message={message} isStaff={false} />
+          ) : isImage ? (
+            <ImageMessage message={message} isStaff={false} />
+          ) : isFile ? (
+            <FileMessage message={message} isStaff={false} />
           ) : (
-            isImage ? (
-              <ImageMessage message={message} isStaff={false} />
-            ) : isFile ? (
-              <FileMessage message={message} isStaff={false} />
-            ) : (
-              <TextMessage message={message} isStaff={false} />
-            )
+            <TextMessage message={message} isStaff={false} />
           )}
         </div>
 
@@ -202,37 +211,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSuggestionClick })
   return (
     <div className="flex flex-col items-end ml-auto max-w-xl">
       <div className="flex items-start flex-row-reverse mt-1">
-        <div className="w-8 h-8 flex-shrink-0 self-start ml-2">
-          {hasAvatar ? (
-            <img
-              src={displayAvatar}
-              alt="Agent Avatar"
-              className="w-full h-full rounded-md object-cover"
-            />
-          ) : (
-            <div
-              className={`w-full h-full rounded-md flex items-center justify-center text-white font-bold text-sm ${defaultAvatar?.colorClass || 'bg-gradient-to-br from-blue-400 to-blue-500'}`}
-            >
-              {defaultAvatar?.letter || '?'}
-            </div>
-          )}
-        </div>
-        <div className="ml-2">
-          {isRichText ? (
+        {/* 自己发送的消息不显示头像 */}
+        <div>
+          {isStreamLoading ? (
+            <LoadingMessage isStaff={true} />
+          ) : isRichText ? (
             <RichTextMessage message={message} isStaff={true} />
+          ) : isImage ? (
+            <ImageMessage message={message} isStaff={true} />
+          ) : isFile ? (
+            <FileMessage message={message} isStaff={true} />
           ) : (
-            isImage ? (
-              <ImageMessage message={message} isStaff={true} />
-            ) : isFile ? (
-              <FileMessage message={message} isStaff={true} />
-            ) : (
-              <TextMessage message={message} isStaff={true} />
-            )
+            <TextMessage message={message} isStaff={true} />
           )}
         </div>
         {isSending && (
           <div
-            className="relative self-center text-gray-400 dark:text-gray-500"
+            className="relative self-center text-gray-400 dark:text-gray-500 mr-2"
             title={t('chat.messages.sending', '发送中...')}
           >
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -240,7 +235,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onSuggestionClick })
         )}
         {hasError && (
           <div
-            className="relative self-center text-red-500 dark:text-red-400 cursor-pointer"
+            className="relative self-center text-red-500 dark:text-red-400 cursor-pointer mr-2"
             onClick={() => setErrorOpen(v => !v)}
             title={t('chat.messages.sendFailedTitle', '发送失败')}
           >

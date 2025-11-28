@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pencil, Trash2, ChevronDown, ChevronUp, Wrench } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Pencil, Trash2, ChevronDown, ChevronUp, Wrench, MessageCircle } from 'lucide-react';
 import AgentToolTag from '@/components/ui/AgentToolTag';
 import KnowledgeBaseTag from '@/components/ui/KnowledgeBaseTag';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -21,6 +22,7 @@ interface AgentCardProps {
  */
 const AgentCard: React.FC<AgentCardProps> = ({ agent, onAction, onToolClick }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [showAllCollections, setShowAllCollections] = useState(false);
   const [showAllTools, setShowAllTools] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -29,6 +31,19 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onAction, onToolClick }) =
   // Get store functions and toast
   const { deleteAgent } = useAIStore();
   const { showToast } = useToast();
+
+  // Navigate to chat with this agent
+  const handleChatWithAgent = (): void => {
+    // Channel type 1 for agent chat, channel ID is agent.id + "-agent"
+    const channelId = `${agent.id}-agent`;
+    navigate(`/chat/1/${channelId}`, {
+      state: {
+        agentName: agent.name,
+        agentAvatar: agent.avatar,
+        platform: 'agent'
+      }
+    });
+  };
 
   const handleAction = (actionType: string): void => {
     if (actionType === 'delete') {
@@ -225,6 +240,13 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onAction, onToolClick }) =
 
       <div className="mt-4 pt-3 border-t border-gray-200/60 dark:border-gray-700 flex justify-end space-x-3">
         <button
+          className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"
+          title={t('agents.card.chatTooltip', '与智能体对话')}
+          onClick={handleChatWithAgent}
+        >
+          <MessageCircle className="w-4 h-4" />
+        </button>
+        <button
           className="text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors duration-200 p-1 rounded hover:bg-green-50 dark:hover:bg-green-900/30"
           title={t('agents.card.editTooltip', '编辑智能体')}
           onClick={() => handleAction('edit')}
@@ -233,6 +255,7 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onAction, onToolClick }) =
         </button>
         <button
           className="transition-colors duration-200 p-1 rounded text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+          title={t('agents.card.deleteTooltip', '删除智能体')}
           onClick={() => handleAction('delete')}
         >
           <Trash2 className="w-4 h-4" />

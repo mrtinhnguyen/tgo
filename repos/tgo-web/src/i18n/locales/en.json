@@ -300,6 +300,7 @@
       "defaultRole": "Agent",
       "noTools": "No tools associated",
       "noKnowledgeBases": "No knowledge bases associated",
+      "chatTooltip": "Chat with Agent",
       "editTooltip": "Edit Agent",
       "deleteTooltip": "Delete Agent",
       "llmLabel": "LLM",

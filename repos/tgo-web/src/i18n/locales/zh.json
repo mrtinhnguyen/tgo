@@ -384,6 +384,7 @@
       "defaultRole": "智能体",
       "noTools": "未关联工具",
       "noKnowledgeBases": "未关联知识库",
+      "chatTooltip": "与智能体对话",
       "editTooltip": "编辑智能体",
       "deleteTooltip": "删除智能体",
       "llmLabel": "LLM"

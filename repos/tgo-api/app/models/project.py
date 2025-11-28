@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import String, Text, func
+from sqlalchemy import String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -29,6 +29,13 @@ class Project(Base):
         unique=True,
         nullable=False,
         comment="API key for authentication"
+    )
+
+    # AI service integration
+    default_team_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="Default AI team ID from AI service"
     )
 
     # Timestamps

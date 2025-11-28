@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import AgentCard from './AgentCard';
 import CreateAgentModal from './CreateAgentModal';
 import AgentDetailModal from './AgentDetailModal';
 import EditAgentModal from './EditAgentModal';
+import TeamInfoModal from './TeamInfoModal';
 // import MCPToolDetailModal from '@/components/ui/MCPToolDetailModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { AgentsGridSkeleton, AgentsErrorState, AgentsEmptyState } from '@/components/ui/AgentsSkeleton';
 import { useAIStore } from '@/stores';
 import { useToast } from '@/hooks/useToast';
-import { LuPlus, LuChevronLeft, LuChevronRight, LuRefreshCw } from 'react-icons/lu';
+import { LuPlus, LuChevronLeft, LuChevronRight, LuUsers } from 'react-icons/lu';
+import { MessageCircle } from 'lucide-react';
 import type { Agent, AgentToolResponse } from '@/types';
+import { aiTeamsApiService, TeamWithDetailsResponse } from '@/services/aiTeamsApi';
 
 /**
  * Agent management page component
@@ -27,10 +31,10 @@ const selectUpdateAgent = (state: any) => state.updateAgent;
 const selectDeleteAgent = (state: any) => state.deleteAgent;
 const selectSetShowCreateAgentModal = (state: any) => state.setShowCreateAgentModal;
 const selectLoadAgents = (state: any) => state.loadAgents;
-const selectRefreshAgents = (state: any) => state.refreshAgents;
 
 const AgentManagement: React.FC = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const agents = useAIStore(selectAgents);
   const currentPage = useAIStore(selectCurrentPage);
   const pageSize = useAIStore(selectPageSize);
@@ -42,7 +46,6 @@ const AgentManagement: React.FC = () => {
   const deleteAgent = useAIStore(selectDeleteAgent);
   const setShowCreateAgentModal = useAIStore(selectSetShowCreateAgentModal);
   const loadAgents = useAIStore(selectLoadAgents);
-  const refreshAgents = useAIStore(selectRefreshAgents);
 
   const { showSuccess, showError } = useToast();
 
@@ -52,13 +55,36 @@ const AgentManagement: React.FC = () => {
   const [showAgentDetail, setShowAgentDetail] = useState(false);
   const [showEditAgent, setShowEditAgent] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showTeamInfo, setShowTeamInfo] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Team state
+  const [defaultTeam, setDefaultTeam] = useState<TeamWithDetailsResponse | null>(null);
+  const [isLoadingTeam, setIsLoadingTeam] = useState(false);
+
   // Track if agents have been loaded to prevent multiple API calls
   const hasLoadedAgents = useRef(false);
+  const hasLoadedTeam = useRef(false);
 
-  // Load agents on component mount - using ref to prevent multiple calls
+  // Load default team info
+  const loadDefaultTeam = useCallback(async () => {
+    if (hasLoadedTeam.current) return;
+    setIsLoadingTeam(true);
+    try {
+      hasLoadedTeam.current = true;
+      const teamData = await aiTeamsApiService.getDefaultTeam(false);
+      setDefaultTeam(teamData);
+    } catch (error) {
+      hasLoadedTeam.current = false;
+      console.error('Failed to load default team:', error);
+      // Don't show error toast for team loading - it's not critical
+    } finally {
+      setIsLoadingTeam(false);
+    }
+  }, []);
+
+  // Load agents and team on component mount
   useEffect(() => {
     if (hasLoadedAgents.current) {
       return; // Already loaded, don't load again
@@ -79,7 +105,8 @@ const AgentManagement: React.FC = () => {
     };
 
     loadInitialAgents();
-  }, []); // Empty dependency array - only run on mount
+    loadDefaultTeam();
+  }, [loadDefaultTeam]); // Empty dependency array - only run on mount
 
   // 在组件中计算分页
   const { paginatedAgents, totalPages } = React.useMemo(() => {
@@ -94,21 +121,39 @@ const AgentManagement: React.FC = () => {
     setShowCreateAgentModal(true);
   };
 
-  const handleRefreshAgents = useCallback(async (): Promise<void> => {
-    try {
-      await refreshAgents();
-      showSuccess(
-        t('agents.messages.refreshSuccess', '刷新成功'),
-        t('agents.messages.refreshSuccessDesc', '智能体列表已更新')
-      );
-    } catch (error) {
-      console.error('Failed to refresh agents:', error);
+  const handleOpenTeamInfo = (): void => {
+    setShowTeamInfo(true);
+  };
+
+  const handleChatWithTeam = (): void => {
+    if (!defaultTeam) {
       showError(
-        t('agents.messages.refreshFailed', '刷新失败'),
-        t('agents.messages.refreshFailedDesc', '无法刷新智能体列表，请稍后重试')
+        t('agents.messages.noTeam', '团队未加载'),
+        t('agents.messages.noTeamDesc', '请稍后重试')
       );
+      return;
     }
-  }, [refreshAgents, showSuccess, showError, t]);
+    if (agents.length === 0) {
+      showError(
+        t('agents.messages.noAgentsForTeamChat', '无法发起团队对话'),
+        t('agents.messages.noAgentsForTeamChatDesc', '请先创建至少一个智能体')
+      );
+      return;
+    }
+    const channelId = `${defaultTeam.id}-team`;
+    navigate(`/chat/1/${channelId}`, {
+      state: {
+        agentName: defaultTeam.name || t('agents.teamChat.defaultName', '智能体团队'),
+        platform: 'team'
+      }
+    });
+  };
+
+  const handleTeamUpdated = useCallback(async () => {
+    // Refresh team data after update
+    hasLoadedTeam.current = false;
+    await loadDefaultTeam();
+  }, [loadDefaultTeam]);
 
   // Handle retry on error
   const handleRetry = useCallback(async (): Promise<void> => {
@@ -239,12 +284,20 @@ const AgentManagement: React.FC = () => {
         </div>
         <div className="flex items-center space-x-2">
           <button
-            className="flex items-center px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-1 transition-colors duration-200 disabled:opacity-50"
-            onClick={handleRefreshAgents}
-            disabled={isLoadingAgents}
+            className="flex items-center px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm rounded-md hover:bg-green-200 dark:hover:bg-green-900/50 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleChatWithTeam}
+            disabled={!defaultTeam || isLoadingTeam || agents.length === 0}
+            title={agents.length === 0 ? t('agents.actions.teamChatNoAgents', '请先创建智能体') : t('agents.actions.teamChatTooltip', '与智能体团队对话')}
           >
-            <LuRefreshCw className={`w-4 h-4 mr-1 ${isLoadingAgents ? 'animate-spin' : ''}`} />
-            <span>{t('agents.actions.refresh', '刷新')}</span>
+            <MessageCircle className="w-4 h-4 mr-1" />
+            <span>{t('agents.actions.teamChat', '团队对话')}</span>
+          </button>
+          <button
+            className="flex items-center px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-sm rounded-md hover:bg-purple-200 dark:hover:bg-purple-900/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 transition-colors duration-200"
+            onClick={handleOpenTeamInfo}
+          >
+            <LuUsers className="w-4 h-4 mr-1" />
+            <span>{t('agents.actions.teamInfo', '团队信息')}</span>
           </button>
           <button
             className="flex items-center px-3 py-1.5 bg-blue-500 dark:bg-blue-600 text-white text-sm rounded-md hover:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors duration-200"
@@ -335,6 +388,14 @@ const AgentManagement: React.FC = () => {
 
       {/* 智能体创建模态框 */}
       <CreateAgentModal />
+
+      {/* 团队信息模态框 */}
+      <TeamInfoModal
+        isOpen={showTeamInfo}
+        onClose={() => setShowTeamInfo(false)}
+        team={defaultTeam}
+        onTeamUpdated={handleTeamUpdated}
+      />
 
       {/* 智能体详情模态框 */}
       <AgentDetailModal

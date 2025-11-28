@@ -10,6 +10,8 @@ import { formatWeChatConversationTime } from '@/utils/timeFormatting';
 import { ChatAvatar } from './ChatAvatar';
 import { ChatPlatformIcon } from './ChatPlatformIcon';
 import { ChatTags } from './ChatTags';
+import { Bot } from 'lucide-react';
+import { TbBrain } from 'react-icons/tb';
 
 export interface ChatListItemProps {
   chat: Chat;
@@ -23,8 +25,18 @@ export interface ChatListItemProps {
 export const ChatListItem: React.FC<ChatListItemProps> = React.memo(({ chat, isActive, onClick }) => {
   const channelId = chat.channelId;
   const channelType = chat.channelType ?? DEFAULT_CHANNEL_TYPE;
+  
+  // 判断是否是 agent 会话（channelId 以 -agent 结尾）或 team 会话（channelId 以 -team 结尾）
+  const isAgentChat = channelId?.endsWith('-agent') ?? false;
+  const isTeamChat = channelId?.endsWith('-team') ?? false;
 
-  const displayName = chat.channelInfo?.name || `访客${String(channelId || chat.id).slice(-4)}`;
+  const displayName = chat.channelInfo?.name || (
+    isAgentChat 
+      ? '智能体' 
+      : isTeamChat 
+        ? '智能体团队' 
+        : `访客${String(channelId || chat.id).slice(-4)}`
+  );
   const displayAvatar = chat.channelInfo?.avatar || '';
 
   const compositeKey = useMemo(() => {
@@ -83,15 +95,21 @@ export const ChatListItem: React.FC<ChatListItemProps> = React.memo(({ chat, isA
 
       <div className="flex-grow overflow-hidden">
         <div className="flex justify-between items-center">
-          <h3 className={`text-sm font-semibold truncate ${isActive ? 'text-white' : 'text-gray-800 dark:text-gray-200'}`}>
-            {displayName}
-            <ChatPlatformIcon platformType={(() => {
-              const extra: any = chat.channelInfo?.extra;
-              const fromExtra: PlatformType | undefined = (extra && typeof extra === 'object' && 'platform_type' in extra)
-                ? (extra.platform_type as PlatformType)
-                : undefined;
-              return fromExtra ?? toPlatformType(chat.platform);
-            })()} />
+          <h3 className={`text-sm font-semibold truncate flex items-center ${isActive ? 'text-white' : 'text-gray-800 dark:text-gray-200'}`}>
+            <span className="truncate">{displayName}</span>
+            {isAgentChat ? (
+              <Bot className={`w-3.5 h-3.5 ml-1 flex-shrink-0 ${isActive ? 'text-blue-100' : 'text-purple-500 dark:text-purple-400'}`} />
+            ) : isTeamChat ? (
+              <TbBrain className={`w-3.5 h-3.5 ml-1 flex-shrink-0 ${isActive ? 'text-blue-100' : 'text-green-500 dark:text-green-400'}`} />
+            ) : (
+              <ChatPlatformIcon platformType={(() => {
+                const extra: any = chat.channelInfo?.extra;
+                const fromExtra: PlatformType | undefined = (extra && typeof extra === 'object' && 'platform_type' in extra)
+                  ? (extra.platform_type as PlatformType)
+                  : undefined;
+                return fromExtra ?? toPlatformType(chat.platform);
+              })()} />
+            )}
           </h3>
           <span className={`text-xs flex-shrink-0 ml-2 ${isActive ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>
             {formatWeChatConversationTime(chat.timestamp)}

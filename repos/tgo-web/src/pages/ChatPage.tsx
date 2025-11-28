@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ChatList from '../components/layout/ChatList';
 import ChatWindow from '../components/layout/ChatWindow';
 import VisitorPanel from '../components/layout/VisitorPanel';
@@ -8,25 +9,100 @@ import { getChannelKey } from '@/utils/channelUtils';
 /**
  * Chat page component - contains the original chat interface
  */
+interface ChatPageLocationState {
+  agentName?: string;
+  agentAvatar?: string;
+  platform?: string;
+}
+
 const ChatPage: React.FC = () => {
+  const { channelType: urlChannelType, channelId: urlChannelId } = useParams<{ channelType: string; channelId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state as ChatPageLocationState | null;
+  
   const activeChat = useChatStore(chatSelectors.activeChat);
   const setActiveChat = useChatStore(state => state.setActiveChat);
   const chats = useChatStore(state => state.chats);
-  const syncConversations = useChatStore(state => state.syncConversations);
+  const syncConversationsIfNeeded = useChatStore(state => state.syncConversationsIfNeeded);
   const loadHistoricalMessages = useChatStore(state => state.loadHistoricalMessages);
   const clearConversationUnread = useChatStore(state => state.clearConversationUnread);
 
-  // 页面加载时同步对话
-  useEffect(() => {
-    syncConversations();
-  }, [syncConversations]);
+  // Track if we're syncing from URL to prevent loops
+  const isSyncingFromUrl = useRef(false);
+  // Track if initial URL sync has been attempted
+  const hasAttemptedUrlSync = useRef(false);
 
-  // 设置默认活跃聊天
+  // 页面加载时仅在未同步过时同步对话（之后由 WebSocket 实时消息更新）
   useEffect(() => {
-    if (!activeChat && chats.length > 0) {
-      setActiveChat(chats[0]);
+    syncConversationsIfNeeded();
+  }, [syncConversationsIfNeeded]);
+
+  const createChatByChannel = useChatStore(state => state.createChatByChannel);
+  const isSyncing = useChatStore(state => state.isSyncing);
+
+  // 从 URL 参数定位会话（仅在 URL 变化或同步完成时执行一次）
+  useEffect(() => {
+    // Only attempt URL sync once per URL change, after sync is complete
+    if (urlChannelType && urlChannelId && !isSyncing && !hasAttemptedUrlSync.current) {
+      hasAttemptedUrlSync.current = true;
+      const targetChannelType = parseInt(urlChannelType, 10);
+      
+      // 使用 getState() 获取最新的 chats，避免依赖 chats 数组导致重复触发
+      const currentChats = useChatStore.getState().chats;
+      const currentActiveChat = useChatStore.getState().activeChat;
+      
+      // 如果当前 activeChat 已经是目标会话，不需要再设置
+      if (currentActiveChat?.channelId === urlChannelId && currentActiveChat?.channelType === targetChannelType) {
+        return;
+      }
+      
+      const targetChat = currentChats.find(
+        c => c.channelId === urlChannelId && c.channelType === targetChannelType
+      );
+      
+      if (targetChat) {
+        // Found the chat, select it
+        isSyncingFromUrl.current = true;
+        setActiveChat(targetChat);
+        loadHistoricalMessages(targetChat.channelId, targetChat.channelType);
+        // Clear unread
+        if ((targetChat.unreadCount || 0) > 0) {
+          clearConversationUnread(targetChat.channelId, targetChat.channelType);
+        }
+        isSyncingFromUrl.current = false;
+      } else {
+        // Chat not found, create a new one
+        isSyncingFromUrl.current = true;
+        const newChat = createChatByChannel(urlChannelId, targetChannelType, {
+          platform: locationState?.platform,
+          name: locationState?.agentName,
+          avatar: locationState?.agentAvatar
+        });
+        setActiveChat(newChat);
+        loadHistoricalMessages(urlChannelId, targetChannelType);
+        isSyncingFromUrl.current = false;
+      }
     }
-  }, [activeChat, chats.length, setActiveChat]);
+  }, [urlChannelType, urlChannelId, isSyncing, setActiveChat, loadHistoricalMessages, clearConversationUnread, createChatByChannel, locationState]);
+
+  // Reset URL sync flag when URL params change
+  useEffect(() => {
+    hasAttemptedUrlSync.current = false;
+  }, [urlChannelType, urlChannelId]);
+
+  // 设置默认活跃聊天（仅当没有 URL 参数时）
+  useEffect(() => {
+    // If URL has params, don't auto-select first chat
+    if (urlChannelType && urlChannelId) return;
+    
+    if (!activeChat && chats.length > 0) {
+      const firstChat = chats[0];
+      setActiveChat(firstChat);
+      // Update URL for the default chat
+      navigate(`/chat/${firstChat.channelType}/${firstChat.channelId}`, { replace: true });
+    }
+  }, [activeChat, chats, setActiveChat, urlChannelType, urlChannelId, navigate]);
 
   const handleChatSelect = (chat: any): void => {
     const prev = activeChat;
@@ -46,8 +122,10 @@ const ChatPage: React.FC = () => {
     }
 
     setActiveChat(chat);
-    // 加载历史消息（使用扁平化的 Chat 字段）
+    
+    // Update URL with the selected chat's channel info
     if (chat.channelId && chat.channelType != null) {
+      navigate(`/chat/${chat.channelType}/${chat.channelId}`, { replace: true });
       loadHistoricalMessages(chat.channelId, chat.channelType);
     }
   };
@@ -68,6 +146,11 @@ const ChatPage: React.FC = () => {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  // 判断当前会话是否是 agent 会话（channelId 以 -agent 结尾）或 team 会话（channelId 以 -team 结尾）
+  const isAgentChat = activeChat?.channelId?.endsWith('-agent') ?? false;
+  const isTeamChat = activeChat?.channelId?.endsWith('-team') ?? false;
+  const isAIChat = isAgentChat || isTeamChat;
+
   return (
     <div className="flex h-full w-full bg-gray-50 dark:bg-gray-900">
       {/* Chat List */}
@@ -82,10 +165,8 @@ const ChatPage: React.FC = () => {
         activeChat={activeChat}
       />
 
-
-
-      {/* Visitor Info Panel */}
-      <VisitorPanel activeChat={activeChat} />
+      {/* Visitor Info Panel - 仅在非 AI 会话（非 agent 和非 team）时显示 */}
+      {!isAIChat && <VisitorPanel activeChat={activeChat} />}
     </div>
   );
 };

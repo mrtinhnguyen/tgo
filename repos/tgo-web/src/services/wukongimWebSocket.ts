@@ -20,6 +20,7 @@ export type MessageHandler = (message: Message) => void;
 export type ConnectionStatusHandler = (status: ConnectionStatus) => void;
 export type ErrorHandler = (error: any) => void;
 export type StreamMessageHandler = (clientMsgNo: string, content: string) => void;
+export type StreamEndHandler = (clientMsgNo: string) => void;
 export type VisitorPresenceEvent = { visitorId?: string; channelId: string; channelType: number; isOnline: boolean; timestamp?: string | null; eventType: string; raw?: any };
 export type VisitorPresenceHandler = (presence: VisitorPresenceEvent) => void;
 
@@ -44,6 +45,7 @@ export class WuKongIMWebSocketService {
   private visitorProfileUpdatedHandlers: VisitorProfileUpdatedHandler[] = [];
 
   private streamMessageHandlers: StreamMessageHandler[] = [];
+  private streamEndHandlers: StreamEndHandler[] = [];
   private visitorPresenceHandlers: VisitorPresenceHandler[] = [];
 
   // Reconnection timer (for cleanup)
@@ -561,6 +563,10 @@ export class WuKongIMWebSocketService {
           } else {
             this.notifyVisitorProfileUpdatedHandlers({ visitorId, channelId, channelType, raw: payload });
           }
+        } else if (event.type === '___TextMessageEnd') {
+          // AI streaming content ended
+          console.log('🔌 Stream message ended:', { clientMsgNo: event.id });
+          this.notifyStreamEndHandlers(event.id);
         } else {
           console.log('🔌 CustomEvent type not handled:', event.type);
         }
@@ -723,6 +729,31 @@ export class WuKongIMWebSocketService {
   }
 
   /**
+   * Notify all stream end handlers
+   */
+  private notifyStreamEndHandlers(clientMsgNo: string): void {
+    console.log('🔌 Notifying stream end handlers:', {
+      clientMsgNo,
+      handlerCount: this.streamEndHandlers.length
+    });
+
+    this.streamEndHandlers.forEach(handler => {
+      try {
+        handler(clientMsgNo);
+      } catch (error) {
+        console.error('Stream end handler error:', error);
+      }
+    });
+
+    // Broadcast a DOM event so UI components can react
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('chat:stream-end', {
+        detail: { clientMsgNo }
+      }));
+    }
+  }
+
+  /**
    * Notify all visitor profile updated handlers
    */
   private notifyVisitorProfileUpdatedHandlers(event: VisitorProfileUpdatedEvent): void {
@@ -793,6 +824,22 @@ export class WuKongIMWebSocketService {
       if (index > -1) {
         this.streamMessageHandlers.splice(index, 1);
         console.log('🔌 Stream message handler unregistered, remaining:', this.streamMessageHandlers.length);
+      }
+    };
+  }
+
+  /**
+   * Subscribe to stream end events (AI streaming finished)
+   */
+  onStreamEnd(handler: StreamEndHandler): () => void {
+    this.streamEndHandlers.push(handler);
+    console.log('🔌 Stream end handler registered, total:', this.streamEndHandlers.length);
+
+    return () => {
+      const index = this.streamEndHandlers.indexOf(handler);
+      if (index > -1) {
+        this.streamEndHandlers.splice(index, 1);
+        console.log('🔌 Stream end handler unregistered, remaining:', this.streamEndHandlers.length);
       }
     };
   }

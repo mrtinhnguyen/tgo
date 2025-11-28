@@ -7,7 +7,7 @@ import type { WuKongIMMessage, Message } from '@/types';
 
 // Constants
 const SCROLL_THRESHOLD = 100; // Load more when within 100px of top
-const SCROLL_POSITION_TOLERANCE = 10; // Tolerance for "at bottom" detection
+const SCROLL_POSITION_TOLERANCE = 50; // Tolerance for "at bottom" detection (increased for better UX)
 const IS_DEVELOPMENT = import.meta.env.DEV; // Vite environment variable
 
 /**
@@ -180,6 +180,9 @@ const MessagesListComponent: React.FC<MessagesListProps> = ({
       container.scrollTop = container.scrollHeight;
     }
 
+    // After scrolling to bottom, mark user as at bottom
+    isUserAtBottomRef.current = true;
+
     if (IS_DEVELOPMENT) {
       console.log('📜 MessagesList: Scrolled to bottom', {
         scrollHeight: container.scrollHeight,
@@ -279,6 +282,8 @@ const MessagesListComponent: React.FC<MessagesListProps> = ({
       const container = messagesContainerRef.current;
       // Force scroll to bottom immediately
       container.scrollTop = container.scrollHeight;
+      // Mark user as at bottom after initial scroll
+      isUserAtBottomRef.current = true;
 
       if (IS_DEVELOPMENT) {
         const isAtBottom = container.scrollTop >= container.scrollHeight - container.clientHeight - SCROLL_POSITION_TOLERANCE;

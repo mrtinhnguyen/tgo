@@ -71,7 +71,6 @@ class AgentBuilder:
         model = self._initialize_model(config)
         instructions = self._compose_system_prompt(config.system_prompt)
         enable_memory = request.enable_memory or bool(config.enable_memory)
-
         self._logger.debug(
             "Creating agent",
             tool_count=len(tools),

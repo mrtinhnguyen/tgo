@@ -59,12 +59,12 @@ interface MarkdownContentProps {
 }
 
 const headingClassMap: Record<number, string> = {
-  1: 'text-2xl font-bold mb-4 mt-6 text-gray-900 border-b pb-2',
-  2: 'text-xl font-bold mb-3 mt-5 text-gray-900 border-b pb-2',
-  3: 'text-lg font-bold mb-2 mt-4 text-gray-900',
-  4: 'text-base font-bold mb-2 mt-3 text-gray-900',
-  5: 'text-sm font-bold mb-2 mt-3 text-gray-900',
-  6: 'text-xs font-bold mb-2 mt-3 text-gray-700'
+  1: 'text-2xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-600 pb-2',
+  2: 'text-xl font-bold mb-3 mt-5 text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-600 pb-2',
+  3: 'text-lg font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100',
+  4: 'text-base font-bold mb-2 mt-3 text-gray-900 dark:text-gray-100',
+  5: 'text-sm font-bold mb-2 mt-3 text-gray-900 dark:text-gray-100',
+  6: 'text-xs font-bold mb-2 mt-3 text-gray-700 dark:text-gray-300'
 };
 
 const escapeHtml = (value: string): string =>
@@ -100,18 +100,18 @@ const sanitizeHref = (href?: string | null): string => {
 const renderer: RendererObject = {
   heading(this: RendererThis, { tokens, depth }: Tokens.Heading) {
     const html = this.parser.parseInline(tokens);
-    const clz = headingClassMap[depth] || 'font-bold mt-4 mb-2 text-gray-900';
+    const clz = headingClassMap[depth] || 'font-bold mt-4 mb-2 text-gray-900 dark:text-gray-100';
     return `<h${depth} class="${clz}">${html}</h${depth}>`;
   },
   // paragraph(this: RendererThis, { tokens }: Tokens.Paragraph) {
   //   const html = this.parser.parseInline(tokens);
-  //   return `<p class="mb-3 leading-relaxed text-gray-800">${html}</p>`;
+  //   return `<p class="mb-3 leading-relaxed text-gray-800 dark:text-gray-200">${html}</p>`;
   // },
   link(this: RendererThis, { href, title, tokens }: Tokens.Link) {
     const html = this.parser.parseInline(tokens);
     const safeHref = sanitizeHref(href);
     const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
-    return `<a href="${escapeHtml(safeHref)}"${titleAttr} target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline break-words">${html}</a>`;
+    return `<a href="${escapeHtml(safeHref)}"${titleAttr} target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline break-words">${html}</a>`;
   },
   list(this: RendererThis, token: Tokens.List) {
     const itemsHtml = token.items
@@ -122,10 +122,10 @@ const renderer: RendererObject = {
         const content = singleParagraphMatch ? singleParagraphMatch[1].trim() : trimmed;
 
         const checkbox = item.task
-          ? `<input type="checkbox" class="mr-2 h-3.5 w-3.5 align-middle rounded border border-gray-300 text-blue-500" disabled ${item.checked ? 'checked' : ''} />`
+          ? `<input type="checkbox" class="mr-2 h-3.5 w-3.5 align-middle rounded border border-gray-300 dark:border-gray-600 text-blue-500 dark:text-blue-400" disabled ${item.checked ? 'checked' : ''} />`
           : '';
 
-        return `<li class="text-gray-800 leading-relaxed">${checkbox}${content}</li>`;
+        return `<li class="text-gray-800 dark:text-gray-200 leading-relaxed">${checkbox}${content}</li>`;
       })
       .join('');
     const startAttr = token.ordered && token.start && token.start !== 1 ? ` start="${token.start}"` : '';
@@ -136,10 +136,10 @@ const renderer: RendererObject = {
   },
   blockquote(this: RendererThis, { tokens }: Tokens.Blockquote) {
     const html = this.parser.parse(tokens);
-    return `<blockquote class="border-l-4 border-gray-300 pl-4 py-2 my-3 italic text-gray-700 bg-gray-50">${html}</blockquote>`;
+    return `<blockquote class="border-l-4 border-gray-300 dark:border-gray-600 pl-4 py-2 my-3 italic text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800">${html}</blockquote>`;
   },
   hr() {
-    return '<hr class="my-4 border-t border-gray-300" />';
+    return '<hr class="my-4 border-t border-gray-300 dark:border-gray-600" />';
   },
   table(this: RendererThis, token: Tokens.Table) {
     const headerRow = token.header
@@ -147,12 +147,12 @@ const renderer: RendererObject = {
         const align = token.align[index];
         const alignAttr = align ? ` style="text-align:${align}"` : '';
         const content = this.parser.parseInline(cell.tokens);
-        return `<th class="px-4 py-2 text-left text-sm font-semibold text-gray-900 border border-gray-300"${alignAttr}>${content}</th>`;
+        return `<th class="px-4 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600"${alignAttr}>${content}</th>`;
       })
       .join('');
 
     const headerSection = headerRow
-      ? `<thead class="bg-gray-100"><tr class="border-b border-gray-300">${headerRow}</tr></thead>`
+      ? `<thead class="bg-gray-100 dark:bg-gray-800"><tr class="border-b border-gray-300 dark:border-gray-600">${headerRow}</tr></thead>`
       : '';
 
     const bodyRows = token.rows
@@ -162,16 +162,16 @@ const renderer: RendererObject = {
             const align = token.align[index];
             const alignAttr = align ? ` style="text-align:${align}"` : '';
             const content = this.parser.parseInline(cell.tokens);
-            return `<td class="px-4 py-2 text-sm text-gray-800 border border-gray-300"${alignAttr}>${content}</td>`;
+            return `<td class="px-4 py-2 text-sm text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600"${alignAttr}>${content}</td>`;
           })
           .join('');
-        return `<tr class="border-b border-gray-300">${cells}</tr>`;
+        return `<tr class="border-b border-gray-300 dark:border-gray-600">${cells}</tr>`;
       })
       .join('');
 
     return `
       <div class="my-3 overflow-x-auto">
-        <table class="min-w-full border-collapse border border-gray-300">
+        <table class="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
           ${headerSection}
           <tbody>${bodyRows}</tbody>
         </table>
@@ -180,15 +180,15 @@ const renderer: RendererObject = {
   },
   strong(this: RendererThis, { tokens }: Tokens.Strong) {
     const html = this.parser.parseInline(tokens);
-    return `<strong class="font-bold text-gray-900">${html}</strong>`;
+    return `<strong class="font-bold text-gray-900 dark:text-gray-100">${html}</strong>`;
   },
   em(this: RendererThis, { tokens }: Tokens.Em) {
     const html = this.parser.parseInline(tokens);
-    return `<em class="italic text-gray-800">${html}</em>`;
+    return `<em class="italic text-gray-800 dark:text-gray-200">${html}</em>`;
   },
   del(this: RendererThis, { tokens }: Tokens.Del) {
     const html = this.parser.parseInline(tokens);
-    return `<del class="line-through text-gray-600">${html}</del>`;
+    return `<del class="line-through text-gray-600 dark:text-gray-400">${html}</del>`;
   },
   image(this: RendererThis, { href, title, text }: Tokens.Image) {
     const safeSrc = sanitizeHref(href);
@@ -217,20 +217,71 @@ marked.use({
 const MARKDOWN_CACHE_LIMIT = 200;
 const markdownCache = new Map<string, string>();
 
+/**
+ * Pre-process markdown to handle incomplete/streaming content
+ * This helps prevent rendering issues with unterminated code blocks, etc.
+ */
+const preprocessStreamingMarkdown = (markdown: string): string => {
+  if (!markdown) return '';
+
+  let processed = markdown;
+
+  // Remove leading whitespace from the start of content to prevent
+  // it being interpreted as an indented code block (4+ spaces = code block in Markdown)
+  // But preserve intentional code blocks (those starting with ```)
+  processed = processed.replace(/^[ \t]+/gm, (match, offset) => {
+    // Check if this line is inside a fenced code block
+    const before = processed.substring(0, offset);
+    const fenceMatches = before.match(/^(`{3,}|~{3,})/gm) || [];
+    // If odd number of fences before this line, we're inside a code block - preserve spaces
+    if (fenceMatches.length % 2 !== 0) {
+      return match;
+    }
+    // Otherwise, trim leading spaces to prevent indented code block interpretation
+    // Keep up to 3 spaces (Markdown allows up to 3 for normal content)
+    return match.length > 3 ? '   ' : match;
+  });
+
+  // Count code fence occurrences (``` or ~~~)
+  const codeBlockMatches = processed.match(/^(`{3,}|~{3,})/gm) || [];
+  const codeBlockCount = codeBlockMatches.length;
+
+  // If odd number of code fences, the last code block is unclosed - close it
+  if (codeBlockCount % 2 !== 0) {
+    // Find the last code fence to determine which type to use for closing
+    const lastFenceMatch = processed.match(/(`{3,}|~{3,})(?!.*(`{3,}|~{3,}))/s);
+    const closingFence = lastFenceMatch ? lastFenceMatch[1].charAt(0).repeat(3) : '```';
+    processed = processed + '\n' + closingFence;
+  }
+
+  // Handle unclosed inline code (backticks)
+  // Count single backticks not part of code fences
+  const inlineCodePattern = /(?<!`)`(?!`)/g;
+  const inlineMatches = processed.match(inlineCodePattern) || [];
+  if (inlineMatches.length % 2 !== 0) {
+    processed = processed + '`';
+  }
+
+  return processed;
+};
+
 const renderMarkdownToHtml = (markdown: string): string => {
   if (!markdown) return '';
 
-  const cached = markdownCache.get(markdown);
+  // Pre-process for streaming content
+  const processedMarkdown = preprocessStreamingMarkdown(markdown);
+
+  const cached = markdownCache.get(processedMarkdown);
   if (cached) {
     return cached;
   }
 
-  const parsed = marked.parse(markdown) as string;
+  const parsed = marked.parse(processedMarkdown) as string;
   const sanitized = typeof window !== 'undefined'
     ? DOMPurify.sanitize(parsed, { USE_PROFILES: { html: true } })
     : parsed;
 
-  markdownCache.set(markdown, sanitized);
+  markdownCache.set(processedMarkdown, sanitized);
   if (markdownCache.size > MARKDOWN_CACHE_LIMIT) {
     const firstKey = markdownCache.keys().next().value;
     if (firstKey) {

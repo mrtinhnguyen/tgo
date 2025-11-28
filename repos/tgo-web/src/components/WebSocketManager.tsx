@@ -24,6 +24,7 @@ export const WebSocketManager: React.FC = () => {
   const user = useAuthStore(state => state.user);
   const handleRealtimeMessage = useChatStore(state => state.handleRealtimeMessage);
   const appendStreamMessageContent = useChatStore(state => state.appendStreamMessageContent);
+  const markStreamMessageEnd = useChatStore(state => state.markStreamMessageEnd);
   const activeChat = useChatStore(state => state.activeChat);
 
   /**
@@ -61,12 +62,31 @@ export const WebSocketManager: React.FC = () => {
     handleRealtimeMessage
   ]);
 
+  // Track if this is a reconnection (not the initial connection)
+  const wasConnectedRef = React.useRef(false);
+  const forceSyncConversations = useChatStore(state => state.forceSyncConversations);
+
   /**
    * Handle connection status changes
    */
   const handleConnectionStatus = React.useCallback((status: ConnectionStatus) => {
     console.log('🔌 WebSocket Manager: Connection status changed:', status);
-  }, []);
+    
+    // If we're now connected and we were previously connected (i.e., this is a reconnection)
+    if (status.isConnected) {
+      if (wasConnectedRef.current) {
+        // This is a reconnection, sync conversations
+        console.log('🔌 WebSocket Manager: Reconnected, syncing conversations');
+        forceSyncConversations().catch(err => {
+          console.error('🔌 WebSocket Manager: Failed to sync after reconnection:', err);
+        });
+      }
+      wasConnectedRef.current = true;
+    } else if (!status.isConnecting) {
+      // Connection lost (not just connecting)
+      // Keep wasConnectedRef.current as true to detect next reconnection
+    }
+  }, [forceSyncConversations]);
 
   /**
    * Handle WebSocket errors
@@ -88,6 +108,18 @@ export const WebSocketManager: React.FC = () => {
       console.error('🤖 WebSocket Manager: Error appending stream message content:', error);
     }
   }, [appendStreamMessageContent]);
+
+  /**
+   * Handle AI stream end events
+   */
+  const handleStreamEnd = React.useCallback((clientMsgNo: string) => {
+    try {
+      markStreamMessageEnd(clientMsgNo);
+      console.log('🤖 WebSocket Manager: Stream message marked as ended');
+    } catch (error) {
+      console.error('🤖 WebSocket Manager: Error marking stream message end:', error);
+    }
+  }, [markStreamMessageEnd]);
 
   /**
    * Handle visitor presence events (visitor.online / visitor.offline)
@@ -183,6 +215,7 @@ export const WebSocketManager: React.FC = () => {
     const unsubscribeStatus = wukongimWebSocketService.onConnectionStatus(handleConnectionStatus);
     const unsubscribeError = wukongimWebSocketService.onError(handleError);
     const unsubscribeStreamMessage = wukongimWebSocketService.onStreamMessage(handleStreamMessage);
+    const unsubscribeStreamEnd = wukongimWebSocketService.onStreamEnd(handleStreamEnd);
     const unsubscribePresence = wukongimWebSocketService.onVisitorPresence(handlePresenceEvent);
     const unsubscribeProfileUpdated = wukongimWebSocketService.onVisitorProfileUpdated(handleVisitorProfileUpdated);
 
@@ -193,10 +226,11 @@ export const WebSocketManager: React.FC = () => {
       unsubscribeStatus();
       unsubscribeError();
       unsubscribeStreamMessage();
+      unsubscribeStreamEnd();
       unsubscribePresence();
       unsubscribeProfileUpdated();
     };
-  }, [handleMessage, handleConnectionStatus, handleError, handleStreamMessage, handlePresenceEvent, handleVisitorProfileUpdated]);
+  }, [handleMessage, handleConnectionStatus, handleError, handleStreamMessage, handleStreamEnd, handlePresenceEvent, handleVisitorProfileUpdated]);
 
   /**
    * Auto-connect when token and user are available

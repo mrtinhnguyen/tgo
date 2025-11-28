@@ -104,7 +104,7 @@ class Team(BaseModel):
 
     id: str = Field(..., description="Team ID")
     name: str = Field(..., description="Team name")
-    model: str = Field(..., description="Team's default LLM model")
+    model: Optional[str] = Field(None, description="Team's default LLM model")
     instruction: Optional[str] = Field(None, description="Team system prompt/instructions")
     expected_output: Optional[str] = Field(None, description="Expected output format")
     llm_provider_credentials: Optional[LLMProviderCredentials] = Field(

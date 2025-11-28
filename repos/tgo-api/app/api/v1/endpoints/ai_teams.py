@@ -25,6 +25,53 @@ router = APIRouter()
 
 
 @router.get(
+    "/default",
+    response_model=TeamWithDetailsResponse,
+    responses=CRUD_RESPONSES,
+    summary="Get Default Team",
+    description="""
+    Get the default team for the authenticated project.
+    
+    Returns the team marked as default for this project, including associated agents
+    with their tools and collections. Returns 404 if no default team is configured.
+    """,
+)
+async def get_default_team(
+    include_agents: bool = Query(
+        True, description="Include associated agents with tools and collections in the response"
+    ),
+    project_and_api_key=Depends(get_authenticated_project),
+) -> TeamWithDetailsResponse:
+    """Get default team for current project."""
+    project, _ = project_and_api_key
+
+    # Check if project has a default team configured
+    if not project.default_team_id:
+        raise HTTPException(
+            status_code=404,
+            detail="No default team configured for this project"
+        )
+
+    logger.info(
+        "Getting default AI team",
+        extra={
+            "project_id": str(project.id),
+            "team_id": project.default_team_id,
+            "include_agents": include_agents,
+        }
+    )
+
+    # Get team details directly using the stored default_team_id
+    result = await ai_client.get_team(
+        project_id=str(project.id),
+        team_id=project.default_team_id,
+        include_agents=include_agents,
+    )
+
+    return TeamWithDetailsResponse.model_validate(result)
+
+
+@router.get(
     "",
     response_model=TeamListResponse,
     responses=LIST_RESPONSES,
@@ -191,10 +238,6 @@ async def update_team(
     )
 
     payload = team_data.model_dump(exclude_none=True)
-    # Normalize model to pure name (strip provider prefix if present)
-    model_val = payload.get("model")
-    if isinstance(model_val, str) and ":" in model_val:
-        payload["model"] = model_val.split(":", 1)[1]
 
     # Map ai_provider_id -> llm_provider_id and validate ownership
     ai_provider_id = payload.pop("ai_provider_id", None)

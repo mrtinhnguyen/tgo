@@ -19,6 +19,7 @@ from app.schemas.visitor import (
     VisitorActivityResponse,
 )
 from app.schemas import TagResponse
+from app.services.ai_client import ai_client
 
 from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE
 from app.utils.encoding import parse_visitor_channel_id
@@ -28,25 +29,32 @@ from app.utils.intent import localize_visitor_response_intent
 router = APIRouter()
 
 
+# Channel ID suffixes
+STAFF_SUFFIX = "-staff"
+AGENT_SUFFIX = "-agent"
+TEAM_SUFFIX = "-team"
+
+
 class ChannelInfoResponse(BaseModel):
     name: str = Field(..., description="Channel display name")
     avatar: str = Field(..., description="Channel avatar URL")
     channel_id: str = Field(..., description="WuKongIM channel identifier")
     channel_type: int = Field(..., description="Channel type: 1 (personal), 251 (customer service)")
-    entity_type: Literal["visitor", "staff"] = Field(
-        ..., description="Entity type represented by this channel: 'visitor' or 'staff'"
+    entity_type: Literal["visitor", "staff", "agent", "team"] = Field(
+        ..., description="Entity type represented by this channel: 'visitor', 'staff', 'agent', or 'team'"
     )
     extra: Optional[Dict[str, Any]] = Field(
         None,
         description=(
             "Scenario 1 – Customer Service Channel (channel_type == 251):\n"
-            "- extra contains the complete VisitorResponse as a dictionary. Fields include: id, platform_id, platform_type, "
-            "platform_open_id, name, nickname, avatar_url, phone_number, email, company, job_title, source, note, "
-            "custom_attributes, created_at, updated_at, deleted_at, first_visit_time, last_visit_time, last_offline_time, "
-            "is_online, and any other fields defined by VisitorResponse.\n\n"
+            "- extra contains the complete VisitorResponse as a dictionary.\n\n"
             "Scenario 2 – Personal Channel - Staff (channel_type == 1 AND channel_id ends with '-staff'):\n"
-            "- extra contains staff metadata as a dictionary with fields: staff_id (UUID string), username (string), role (string, e.g., 'user' or 'agent').\n\n"
-            "Scenario 3 – Personal Channel - Visitor (channel_type == 1 AND channel_id does NOT end with '-staff'):\n"
+            "- extra contains staff metadata: staff_id, username, role.\n\n"
+            "Scenario 3 – Personal Channel - Agent (channel_type == 1 AND channel_id ends with '-agent'):\n"
+            "- extra contains agent metadata from AI service: id, name, instruction, model, is_default, config, team_id, tools, collections.\n\n"
+            "Scenario 4 – Personal Channel - Team (channel_type == 1 AND channel_id ends with '-team'):\n"
+            "- extra contains team metadata from AI service: id, name, model, instruction, expected_output, is_default, agents.\n\n"
+            "Scenario 5 – Personal Channel - Visitor (channel_type == 1 AND channel_id does NOT end with '-staff', '-agent', or '-team'):\n"
             "- Same as Scenario 1: extra contains the complete VisitorResponse as a dictionary."
         ),
         json_schema_extra={
@@ -55,23 +63,7 @@ class ChannelInfoResponse(BaseModel):
                     "id": "550e8400-e29b-41d4-a716-446655440000",
                     "platform_id": "00000000-0000-0000-0000-000000000001",
                     "platform_type": "website",
-                    "platform_open_id": "visitor_open_id_123",
                     "name": "Jane Doe",
-                    "nickname": "jane",
-                    "avatar_url": "https://cdn.example.com/avatars/jane.png",
-                    "phone_number": "+1-555-0100",
-                    "email": "jane@example.com",
-                    "company": "Example Inc.",
-                    "job_title": "Engineer",
-                    "source": "landing_page",
-                    "note": "High intent",
-                    "custom_attributes": {"plan": "pro"},
-                    "created_at": "2024-01-01T12:00:00Z",
-                    "updated_at": "2024-01-10T08:30:00Z",
-                    "deleted_at": None,
-                    "first_visit_time": "2024-01-01T12:00:00Z",
-                    "last_visit_time": "2024-01-10T08:00:00Z",
-                    "last_offline_time": None,
                     "is_online": True
                 },
                 {
@@ -80,30 +72,137 @@ class ChannelInfoResponse(BaseModel):
                     "role": "user"
                 },
                 {
-                    "id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
-                    "platform_id": "00000000-0000-0000-0000-000000000002",
-                    "platform_type": "wechat",
-                    "platform_open_id": "wx_abc_987",
-                    "name": "John Smith",
-                    "nickname": "john",
-                    "avatar_url": "https://cdn.example.com/avatars/john.png",
-                    "phone_number": None,
-                    "email": "john@example.com",
-                    "company": None,
-                    "job_title": None,
-                    "source": "widget",
-                    "note": None,
-                    "custom_attributes": {},
-                    "created_at": "2024-02-02T09:00:00Z",
-                    "updated_at": "2024-02-05T09:00:00Z",
-                    "deleted_at": None,
-                    "first_visit_time": "2024-02-02T09:00:00Z",
-                    "last_visit_time": "2024-02-05T09:00:00Z",
-                    "last_offline_time": "2024-02-05T09:05:00Z",
-                    "is_online": False
-                }
+                    "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                    "name": "Customer Support Agent",
+                    "model": "gpt-4",
+                    "is_default": True,
+                    "tools": [],
+                    "collections": []
+                },
+                {
+                    "id": "b2c3d4e5-6789-01ab-cdef-234567890abc",
+                    "name": "Customer Support Team",
+                    "model": "gpt-4",
+                    "is_default": True,
+                    "agents": []
+                },
             ]
         },
+    )
+
+
+def _build_enriched_visitor_payload(
+    visitor: Visitor,
+    db: Session,
+    project_id: UUID,
+    accept_language: Optional[str] = None,
+) -> VisitorResponse:
+    """Build enriched visitor payload with tags, AI profile/insights, system info, and activities."""
+    active_tags = [
+        vt.tag
+        for vt in visitor.visitor_tags
+        if vt.deleted_at is None and vt.tag and vt.tag.deleted_at is None
+    ]
+    tag_responses = [TagResponse.model_validate(tag) for tag in active_tags]
+
+    ai_profile_response = (
+        VisitorAIProfileResponse.model_validate(visitor.ai_profile) if visitor.ai_profile else None
+    )
+    ai_insight_response = (
+        VisitorAIInsightResponse.model_validate(visitor.ai_insight) if visitor.ai_insight else None
+    )
+    system_info_response = (
+        VisitorSystemInfoResponse.model_validate(visitor.system_info) if visitor.system_info else None
+    )
+
+    recent_activities = (
+        db.query(VisitorActivity)
+        .filter(
+            VisitorActivity.visitor_id == visitor.id,
+            VisitorActivity.project_id == project_id,
+            VisitorActivity.deleted_at.is_(None),
+        )
+        .order_by(VisitorActivity.occurred_at.desc())
+        .limit(10)
+        .all()
+    )
+    recent_activity_responses = [
+        VisitorActivityResponse.model_validate(activity) for activity in recent_activities
+    ]
+
+    visitor_payload = VisitorResponse.model_validate(visitor).model_copy(
+        update={
+            "tags": tag_responses,
+            "ai_profile": ai_profile_response,
+            "ai_insights": ai_insight_response,
+            "system_info": system_info_response,
+            "recent_activities": recent_activity_responses,
+        }
+    )
+    localize_visitor_response_intent(visitor_payload, accept_language)
+
+    return visitor_payload
+
+
+def _get_visitor_with_relations(db: Session, visitor_id: UUID, project_id: UUID) -> Optional[Visitor]:
+    """Query visitor with all necessary relations loaded."""
+    return (
+        db.query(Visitor)
+        .options(
+            selectinload(Visitor.platform),
+            selectinload(Visitor.visitor_tags).selectinload(VisitorTag.tag),
+            selectinload(Visitor.ai_profile),
+            selectinload(Visitor.ai_insight),
+            selectinload(Visitor.system_info),
+        )
+        .filter(
+            Visitor.id == visitor_id,
+            Visitor.project_id == project_id,
+            Visitor.deleted_at.is_(None),
+        )
+        .first()
+    )
+
+
+def _build_visitor_channel_response(
+    visitor: Visitor,
+    visitor_payload: VisitorResponse,
+    channel_id: str,
+    channel_type: int,
+) -> ChannelInfoResponse:
+    """Build channel response for visitor entity."""
+    name = visitor.name or visitor.nickname or "Unknown Visitor"
+    avatar = visitor_payload.avatar_url or ""
+    return ChannelInfoResponse(
+        name=name,
+        avatar=avatar,
+        channel_id=channel_id,
+        channel_type=channel_type,
+        entity_type="visitor",
+        extra=visitor_payload.model_dump(),
+    )
+
+
+def _build_staff_channel_response(
+    staff: Staff,
+    channel_id: str,
+    channel_type: int,
+) -> ChannelInfoResponse:
+    """Build channel response for staff entity."""
+    name = staff.nickname or "Unknown Staff"
+    avatar = staff.avatar_url or ""
+    extra = {
+        "staff_id": str(staff.id),
+        "username": staff.username,
+        "role": getattr(staff, "role", None),
+    }
+    return ChannelInfoResponse(
+        name=name,
+        avatar=avatar,
+        channel_id=channel_id,
+        channel_type=channel_type,
+        entity_type="staff",
+        extra=extra,
     )
 
 
@@ -128,23 +227,7 @@ class ChannelInfoResponse(BaseModel):
                                     "id": "550e8400-e29b-41d4-a716-446655440000",
                                     "platform_id": "00000000-0000-0000-0000-000000000001",
                                     "platform_type": "website",
-                                    "platform_open_id": "visitor_open_id_123",
                                     "name": "Jane Doe",
-                                    "nickname": "jane",
-                                    "avatar_url": "https://cdn.example.com/avatars/jane.png",
-                                    "phone_number": "+1-555-0100",
-                                    "email": "jane@example.com",
-                                    "company": "Example Inc.",
-                                    "job_title": "Engineer",
-                                    "source": "landing_page",
-                                    "note": "High intent",
-                                    "custom_attributes": {"plan": "pro"},
-                                    "created_at": "2024-01-01T12:00:00Z",
-                                    "updated_at": "2024-01-10T08:30:00Z",
-                                    "deleted_at": None,
-                                    "first_visit_time": "2024-01-01T12:00:00Z",
-                                    "last_visit_time": "2024-01-10T08:00:00Z",
-                                    "last_offline_time": None,
                                     "is_online": True
                                 }
                             }
@@ -164,6 +247,45 @@ class ChannelInfoResponse(BaseModel):
                                 }
                             }
                         },
+                        "Personal Channel - Agent": {
+                            "summary": "Personal Channel - Agent",
+                            "value": {
+                                "name": "Customer Support Agent",
+                                "avatar": "",
+                                "channel_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab-agent",
+                                "channel_type": 1,
+                                "entity_type": "agent",
+                                "extra": {
+                                    "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                                    "name": "Customer Support Agent",
+                                    "instruction": "You are a helpful customer support agent...",
+                                    "model": "gpt-4",
+                                    "is_default": True,
+                                    "config": {"temperature": 0.7},
+                                    "team_id": None,
+                                    "tools": [],
+                                    "collections": []
+                                }
+                            }
+                        },
+                        "Personal Channel - Team": {
+                            "summary": "Personal Channel - Team",
+                            "value": {
+                                "name": "Customer Support Team",
+                                "avatar": "",
+                                "channel_id": "b2c3d4e5-6789-01ab-cdef-234567890abc-team",
+                                "channel_type": 1,
+                                "entity_type": "team",
+                                "extra": {
+                                    "id": "b2c3d4e5-6789-01ab-cdef-234567890abc",
+                                    "name": "Customer Support Team",
+                                    "instruction": "You are a customer support team...",
+                                    "model": "gpt-4",
+                                    "is_default": True,
+                                    "agents": []
+                                }
+                            }
+                        },
                         "Personal Channel - Visitor": {
                             "summary": "Personal Channel - Visitor",
                             "value": {
@@ -176,23 +298,7 @@ class ChannelInfoResponse(BaseModel):
                                     "id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
                                     "platform_id": "00000000-0000-0000-0000-000000000002",
                                     "platform_type": "wechat",
-                                    "platform_open_id": "wx_abc_987",
                                     "name": "John Smith",
-                                    "nickname": "john",
-                                    "avatar_url": "https://cdn.example.com/avatars/john.png",
-                                    "phone_number": None,
-                                    "email": "john@example.com",
-                                    "company": None,
-                                    "job_title": None,
-                                    "source": "widget",
-                                    "note": None,
-                                    "custom_attributes": {},
-                                    "created_at": "2024-02-02T09:00:00Z",
-                                    "updated_at": "2024-02-05T09:00:00Z",
-                                    "deleted_at": None,
-                                    "first_visit_time": "2024-02-02T09:00:00Z",
-                                    "last_visit_time": "2024-02-05T09:00:00Z",
-                                    "last_offline_time": "2024-02-05T09:05:00Z",
                                     "is_online": False
                                 }
                             }
@@ -216,7 +322,7 @@ async def get_channel_info(
 
     Security:
     - JWT staff: access to channels within the same project (existing behavior)
-    - Platform API key: only staff personal channels (channel_type==1 and channel_id endswith '-staff'),
+    - Platform API key: only staff/agent personal channels (channel_type==1 and channel_id endswith '-staff' or '-agent'),
       and only within the same project as the platform
     """
     accept_language = request.headers.get("Accept-Language")
@@ -250,7 +356,7 @@ async def get_channel_info(
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid platform_api_key")
             if platform.deleted_at is not None:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform is deleted")
-            if platform.is_active is False:  # noqa: E712
+            if platform.is_active is False:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform is disabled")
         else:
             # Neither JWT nor API key provided
@@ -258,216 +364,104 @@ async def get_channel_info(
 
     # If authenticated via JWT (staff), keep existing behavior
     if current_user is not None:
-        # CUSTOMER SERVICE CHANNEL (251): decode Base62 and extract visitor_id
-        if channel_type == CHANNEL_TYPE_CUSTOMER_SERVICE:
-            try:
-                visitor_uuid = parse_visitor_channel_id(channel_id)
-            except ValueError:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid channel_id format")
+        return await _handle_staff_auth_channel_info(
+            channel_id=channel_id,
+            channel_type=channel_type,
+            current_user=current_user,
+            db=db,
+            accept_language=accept_language,
+        )
 
-            visitor = (
-                db.query(Visitor)
-                .options(
-                    selectinload(Visitor.platform),
-                    selectinload(Visitor.visitor_tags).selectinload(VisitorTag.tag),
-                    selectinload(Visitor.ai_profile),
-                    selectinload(Visitor.ai_insight),
-                    selectinload(Visitor.system_info),
-                )
-                .filter(
-                    Visitor.id == visitor_uuid,
-                    Visitor.project_id == current_user.project_id,
-                    Visitor.deleted_at.is_(None),
-                )
-                .first()
-            )
-            if not visitor:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
-
-            # Build enriched visitor payload (tags, AI profile/insights, system info, recent activities)
-            active_tags = [
-                vt.tag
-                for vt in visitor.visitor_tags
-                if vt.deleted_at is None and vt.tag and vt.tag.deleted_at is None
-            ]
-            tag_responses = [TagResponse.model_validate(tag) for tag in active_tags]
-
-            ai_profile_response = (
-                VisitorAIProfileResponse.model_validate(visitor.ai_profile) if visitor.ai_profile else None
-            )
-            ai_insight_response = (
-                VisitorAIInsightResponse.model_validate(visitor.ai_insight) if visitor.ai_insight else None
-            )
-            system_info_response = (
-                VisitorSystemInfoResponse.model_validate(visitor.system_info) if visitor.system_info else None
-            )
-
-            recent_activities = (
-                db.query(VisitorActivity)
-                .filter(
-                    VisitorActivity.visitor_id == visitor.id,
-                    VisitorActivity.project_id == current_user.project_id,
-                    VisitorActivity.deleted_at.is_(None),
-                )
-                .order_by(VisitorActivity.occurred_at.desc())
-                .limit(10)
-                .all()
-            )
-            recent_activity_responses = [
-                VisitorActivityResponse.model_validate(activity) for activity in recent_activities
-            ]
-
-            visitor_payload = VisitorResponse.model_validate(visitor).model_copy(
-                update={
-                    "tags": tag_responses,
-                    "ai_profile": ai_profile_response,
-                    "ai_insights": ai_insight_response,
-                    "system_info": system_info_response,
-                    "recent_activities": recent_activity_responses,
-                }
-            )
-            localize_visitor_response_intent(visitor_payload, accept_language)
-
-            name = visitor.name or visitor.nickname or "Unknown Visitor"
-            # Use avatar_url from VisitorResponse (already resolved to full URL)
-            avatar = visitor_payload.avatar_url or ""
-            return ChannelInfoResponse(
-                name=name,
-                avatar=avatar,
-                channel_id=channel_id,
-                channel_type=channel_type,
-                entity_type="visitor",
-                extra=visitor_payload.model_dump(),
-            )
-
-        # PERSONAL CHANNEL (1) with -staff suffix => staff
-        if channel_type == 1 and channel_id.endswith("-staff"):
-            staff_id_str = channel_id[:-6]
-            try:
-                staff_uuid = UUID(staff_id_str)
-            except Exception:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid staff_id in channel")
-
-            staff = (
-                db.query(Staff)
-                .filter(
-                    Staff.id == staff_uuid,
-                    Staff.project_id == current_user.project_id,
-                    Staff.deleted_at.is_(None),
-                )
-                .first()
-            )
-            if not staff:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff not found")
-
-            name = staff.nickname or "Unknown Staff"
-            avatar = staff.avatar_url or ""
-            extra = {
-                "staff_id": str(staff.id),
-                "username": staff.username,
-                "role": getattr(staff, "role", None),
-            }
-            return ChannelInfoResponse(
-                name=name,
-                avatar=avatar,
-                channel_id=channel_id,
-                channel_type=channel_type,
-                entity_type="staff",
-                extra=extra,
-            )
-
-        # PERSONAL CHANNEL (1) without -staff => visitor
-        if channel_type == 1 and not channel_id.endswith("-staff"):
-            try:
-                visitor_uuid = UUID(channel_id)
-            except Exception:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid visitor_id in channel")
-
-            visitor = (
-                db.query(Visitor)
-                .options(
-                    selectinload(Visitor.platform),
-                    selectinload(Visitor.visitor_tags).selectinload(VisitorTag.tag),
-                    selectinload(Visitor.ai_profile),
-                    selectinload(Visitor.ai_insight),
-                    selectinload(Visitor.system_info),
-                )
-                .filter(
-                    Visitor.id == visitor_uuid,
-                    Visitor.project_id == current_user.project_id,
-                    Visitor.deleted_at.is_(None),
-                )
-                .first()
-            )
-            if not visitor:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
-
-            # Build enriched visitor payload (tags, AI profile/insights, system info, recent activities)
-            active_tags = [
-                vt.tag
-                for vt in visitor.visitor_tags
-                if vt.deleted_at is None and vt.tag and vt.tag.deleted_at is None
-            ]
-            tag_responses = [TagResponse.model_validate(tag) for tag in active_tags]
-
-            ai_profile_response = (
-                VisitorAIProfileResponse.model_validate(visitor.ai_profile) if visitor.ai_profile else None
-            )
-            ai_insight_response = (
-                VisitorAIInsightResponse.model_validate(visitor.ai_insight) if visitor.ai_insight else None
-            )
-            system_info_response = (
-                VisitorSystemInfoResponse.model_validate(visitor.system_info) if visitor.system_info else None
-            )
-
-            recent_activities = (
-                db.query(VisitorActivity)
-                .filter(
-                    VisitorActivity.visitor_id == visitor.id,
-                    VisitorActivity.project_id == current_user.project_id,
-                    VisitorActivity.deleted_at.is_(None),
-                )
-                .order_by(VisitorActivity.occurred_at.desc())
-                .limit(10)
-                .all()
-            )
-            recent_activity_responses = [
-                VisitorActivityResponse.model_validate(activity) for activity in recent_activities
-            ]
-
-            visitor_payload = VisitorResponse.model_validate(visitor).model_copy(
-                update={
-                    "tags": tag_responses,
-                    "ai_profile": ai_profile_response,
-                    "ai_insights": ai_insight_response,
-                    "system_info": system_info_response,
-                    "recent_activities": recent_activity_responses,
-                }
-            )
-            localize_visitor_response_intent(visitor_payload, accept_language)
-
-            name = visitor.name or visitor.nickname or "Unknown Visitor"
-            # Use avatar_url from VisitorResponse (already resolved to full URL)
-            avatar = visitor_payload.avatar_url or ""
-            return ChannelInfoResponse(
-                name=name,
-                avatar=avatar,
-                channel_id=channel_id,
-                channel_type=channel_type,
-                entity_type="visitor",
-                extra=visitor_payload.model_dump(),
-            )
-
-    # If authenticated via Platform API key, restrict to staff personal channels
+    # If authenticated via Platform API key, restrict to staff/agent personal channels
     if platform is not None:
-        # Only allow channel_type==1 and channel_id ending with '-staff'
-        if not (channel_type == 1 and channel_id.endswith("-staff")):
+        return await _handle_platform_auth_channel_info(
+            channel_id=channel_id,
+            channel_type=channel_type,
+            platform=platform,
+            db=db,
+        )
+
+    # Unsupported or unauthorized
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported channel_type")
+
+
+async def _handle_staff_auth_channel_info(
+    channel_id: str,
+    channel_type: int,
+    current_user: Staff,
+    db: Session,
+    accept_language: Optional[str],
+) -> ChannelInfoResponse:
+    """Handle channel info request for JWT authenticated staff."""
+    # CUSTOMER SERVICE CHANNEL (251): decode Base62 and extract visitor_id
+    if channel_type == CHANNEL_TYPE_CUSTOMER_SERVICE:
+        return await _get_customer_service_channel_info(
+            channel_id=channel_id,
+            channel_type=channel_type,
+            project_id=current_user.project_id,
+            db=db,
+            accept_language=accept_language,
+        )
+
+    # PERSONAL CHANNEL (1)
+    if channel_type == 1:
+        # Staff channel
+        if channel_id.endswith(STAFF_SUFFIX):
+            return _get_staff_channel_info(
+                channel_id=channel_id,
+                channel_type=channel_type,
+                project_id=current_user.project_id,
+                db=db,
+                )
+
+        # Agent channel
+        if channel_id.endswith(AGENT_SUFFIX):
+            return await _get_agent_channel_info(
+                channel_id=channel_id,
+                channel_type=channel_type,
+                project_id=current_user.project_id,
+            )
+
+        # Team channel
+        if channel_id.endswith(TEAM_SUFFIX):
+            return await _get_team_channel_info(
+                channel_id=channel_id,
+                channel_type=channel_type,
+                project_id=current_user.project_id,
+            )
+
+        # Visitor channel (no suffix)
+        return _get_personal_visitor_channel_info(
+            channel_id=channel_id,
+            channel_type=channel_type,
+            project_id=current_user.project_id,
+            db=db,
+            accept_language=accept_language,
+        )
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported channel_type")
+
+
+async def _handle_platform_auth_channel_info(
+    channel_id: str,
+    channel_type: int,
+    platform: Platform,
+    db: Session,
+) -> ChannelInfoResponse:
+    """Handle channel info request for Platform API key authentication."""
+    # Only allow channel_type==1 and channel_id ending with '-staff', '-agent', or '-team'
+    is_staff_channel = channel_type == 1 and channel_id.endswith(STAFF_SUFFIX)
+    is_agent_channel = channel_type == 1 and channel_id.endswith(AGENT_SUFFIX)
+    is_team_channel = channel_type == 1 and channel_id.endswith(TEAM_SUFFIX)
+
+    if not (is_staff_channel or is_agent_channel or is_team_channel):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only staff personal channels are accessible with platform API key",
+            detail="Only staff, agent, and team personal channels are accessible with platform API key",
             )
 
-        staff_id_str = channel_id[:-6]
+    if is_staff_channel:
+        staff_id_str = channel_id[:-len(STAFF_SUFFIX)]
         try:
             staff_uuid = UUID(staff_id_str)
         except Exception:
@@ -488,21 +482,167 @@ async def get_channel_info(
         if staff.project_id != platform.project_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this channel")
 
-        name = staff.nickname or "Unknown Staff"
-        avatar = staff.avatar_url or ""
-        extra = {
-            "staff_id": str(staff.id),
-            "username": staff.username,
-            "role": getattr(staff, "role", None),
-        }
-        return ChannelInfoResponse(
+        return _build_staff_channel_response(staff, channel_id, channel_type)
+
+    # Agent channel
+    if is_agent_channel:
+        return await _get_agent_channel_info(
+            channel_id=channel_id,
+            channel_type=channel_type,
+            project_id=platform.project_id,
+        )
+
+    # Team channel
+    if is_team_channel:
+        return await _get_team_channel_info(
+            channel_id=channel_id,
+            channel_type=channel_type,
+            project_id=platform.project_id,
+        )
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported channel type")
+
+
+async def _get_customer_service_channel_info(
+    channel_id: str,
+    channel_type: int,
+    project_id: UUID,
+    db: Session,
+    accept_language: Optional[str],
+) -> ChannelInfoResponse:
+    """Get channel info for customer service channel (type 251)."""
+    try:
+        visitor_uuid = parse_visitor_channel_id(channel_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid channel_id format")
+
+    visitor = _get_visitor_with_relations(db, visitor_uuid, project_id)
+    if not visitor:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
+
+    visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language)
+    return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type)
+
+
+def _get_staff_channel_info(
+    channel_id: str,
+    channel_type: int,
+    project_id: UUID,
+    db: Session,
+) -> ChannelInfoResponse:
+    """Get channel info for staff personal channel."""
+    staff_id_str = channel_id[:-len(STAFF_SUFFIX)]
+    try:
+        staff_uuid = UUID(staff_id_str)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid staff_id in channel")
+
+    staff = (
+        db.query(Staff)
+        .filter(
+            Staff.id == staff_uuid,
+            Staff.project_id == project_id,
+            Staff.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not staff:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff not found")
+
+    return _build_staff_channel_response(staff, channel_id, channel_type)
+
+
+async def _get_agent_channel_info(
+    channel_id: str,
+    channel_type: int,
+    project_id: UUID,
+) -> ChannelInfoResponse:
+    """Get channel info for agent personal channel."""
+    agent_id_str = channel_id[:-len(AGENT_SUFFIX)]
+    try:
+        agent_uuid = UUID(agent_id_str)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent_id in channel")
+
+    # Fetch agent from AI service
+    try:
+        agent_data = await ai_client.get_agent(
+            project_id=str(project_id),
+            agent_id=str(agent_uuid),
+            include_tools=True,
+            include_collections=True,
+        )
+    except HTTPException as e:
+        if e.status_code == 404:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
+        raise
+
+    name = agent_data.get("name", "Unknown Agent")
+    avatar = agent_data.get("avatar_url", "") or ""
+
+    return ChannelInfoResponse(
             name=name,
             avatar=avatar,
             channel_id=channel_id,
             channel_type=channel_type,
-            entity_type="staff",
-            extra=extra,
-        )
+        entity_type="agent",
+        extra=agent_data,
+    )
 
-    # Unsupported or unauthorized
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported channel_type")
+
+async def _get_team_channel_info(
+    channel_id: str,
+    channel_type: int,
+    project_id: UUID,
+) -> ChannelInfoResponse:
+    """Get channel info for team personal channel."""
+    team_id_str = channel_id[:-len(TEAM_SUFFIX)]
+    try:
+        team_uuid = UUID(team_id_str)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid team_id in channel")
+
+    # Fetch team from AI service
+    try:
+        team_data = await ai_client.get_team(
+            project_id=str(project_id),
+            team_id=str(team_uuid),
+            include_agents=True,
+        )
+    except HTTPException as e:
+        if e.status_code == 404:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+        raise
+
+    name = team_data.get("name", "Unknown Team")
+    avatar = ""  # Teams don't have avatars
+
+    return ChannelInfoResponse(
+        name=name,
+        avatar=avatar,
+        channel_id=channel_id,
+        channel_type=channel_type,
+        entity_type="team",
+        extra=team_data,
+    )
+
+
+def _get_personal_visitor_channel_info(
+    channel_id: str,
+    channel_type: int,
+    project_id: UUID,
+    db: Session,
+    accept_language: Optional[str],
+) -> ChannelInfoResponse:
+    """Get channel info for visitor personal channel (no suffix)."""
+    try:
+        visitor_uuid = UUID(channel_id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid visitor_id in channel")
+
+    visitor = _get_visitor_with_relations(db, visitor_uuid, project_id)
+    if not visitor:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
+
+    visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language)
+    return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type)
