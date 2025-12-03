@@ -42,6 +42,7 @@ services:
       # Use SERVER_HOST from .env for external IP (required for client connections)
       WK_EXTERNAL_IP: ${SERVER_HOST:-127.0.0.1}
     env_file:
+      - ./.env
       - ./envs/wukongim.env
     volumes:
       - ./data/wukongim:/root/wukongim

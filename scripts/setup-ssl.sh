@@ -1,6 +1,6 @@
 #!/bin/bash
 # Setup SSL certificates for Let's Encrypt
-# Usage: ./scripts/setup-ssl.sh <domain1> <domain2> <domain3> [email]
+# Usage: ./scripts/setup-ssl.sh <domain1> <domain2> <domain3> [email] [ws_domain]
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ CERTBOT_DIR="$PROJECT_ROOT/data/certbot"
 SSL_DIR="$PROJECT_ROOT/data/nginx/ssl"
 
 if [ $# -lt 3 ]; then
-    echo "Usage: $0 <web_domain> <widget_domain> <api_domain> [email]"
+    echo "Usage: $0 <web_domain> <widget_domain> <api_domain> [email] [ws_domain]"
     exit 1
 fi
 
@@ -19,13 +19,20 @@ WEB_DOMAIN=$1
 WIDGET_DOMAIN=$2
 API_DOMAIN=$3
 EMAIL=${4:-admin@example.com}
+WS_DOMAIN=${5:-}
 
 # Create necessary directories
 mkdir -p "$CERTBOT_DIR/conf" "$CERTBOT_DIR/www/.well-known/acme-challenge" "$CERTBOT_DIR/logs"
 mkdir -p "$SSL_DIR"
 
+# Build domain list
+DOMAINS=("$WEB_DOMAIN" "$WIDGET_DOMAIN" "$API_DOMAIN")
+if [ -n "$WS_DOMAIN" ] && [ "$WS_DOMAIN" != "localhost" ]; then
+    DOMAINS+=("$WS_DOMAIN")
+fi
+
 echo "[INFO] Setting up Let's Encrypt certificates..."
-echo "[INFO] Domains: $WEB_DOMAIN, $WIDGET_DOMAIN, $API_DOMAIN"
+echo "[INFO] Domains: ${DOMAINS[*]}"
 echo "[INFO] Email: $EMAIL"
 
 # Check if Docker is available
@@ -46,10 +53,10 @@ echo ""
 
 # Track success
 SUCCESS_COUNT=0
-TOTAL_DOMAINS=3
+TOTAL_DOMAINS=${#DOMAINS[@]}
 
 # Run certbot for each domain using webroot mode
-for domain in "$WEB_DOMAIN" "$WIDGET_DOMAIN" "$API_DOMAIN"; do
+for domain in "${DOMAINS[@]}"; do
     echo "[INFO] Requesting certificate for: $domain"
 
     # Use webroot mode - certbot writes challenge files to the webroot

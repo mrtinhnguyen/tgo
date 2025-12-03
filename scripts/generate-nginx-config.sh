@@ -30,6 +30,7 @@ SSL_ENABLED=${SSL_MODE:-none}
 WEB_DOMAIN=${WEB_DOMAIN:-localhost}
 WIDGET_DOMAIN=${WIDGET_DOMAIN:-localhost}
 API_DOMAIN=${API_DOMAIN:-localhost}
+WS_DOMAIN=${WS_DOMAIN:-localhost}
 
 # Generate nginx configuration
 cat > "$NGINX_CONF_DIR/default.conf" << 'NGINX_CONFIG'
@@ -123,6 +124,36 @@ else
 NGINX_CONFIG
 fi
 
+# Add WuKongIM WebSocket HTTP server block (only when SSL is disabled and WS_DOMAIN is configured)
+if [ "$SSL_ENABLED" = "none" ] && [ -n "$WS_DOMAIN" ] && [ "$WS_DOMAIN" != "localhost" ]; then
+    cat >> "$NGINX_CONF_DIR/default.conf" << 'NGINX_CONFIG'
+
+# HTTP - WuKongIM WebSocket Service
+server {
+    listen 80;
+    server_name WS_DOMAIN;
+
+    # Allow Let's Encrypt ACME challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        proxy_pass http://wukongim:5200;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+NGINX_CONFIG
+fi
+
 # Add HTTPS server blocks if SSL is enabled
 if [ "$SSL_ENABLED" != "none" ]; then
     cat >> "$NGINX_CONF_DIR/default.conf" << 'NGINX_CONFIG'
@@ -190,6 +221,31 @@ server {
     }
 }
 
+# HTTPS - WuKongIM WebSocket Service
+server {
+    listen 443 ssl http2;
+    server_name WS_DOMAIN;
+
+    ssl_certificate /etc/nginx/ssl/WS_DOMAIN/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/WS_DOMAIN/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    location / {
+        proxy_pass http://wukongim:5200;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+
 NGINX_CONFIG
 fi
 
@@ -251,7 +307,8 @@ fi
 TEMP_CONF=$(mktemp)
 cat "$NGINX_CONF_DIR/default.conf" | sed "s/WEB_DOMAIN/$WEB_DOMAIN/g" | \
   sed "s/WIDGET_DOMAIN/$WIDGET_DOMAIN/g" | \
-  sed "s/API_DOMAIN/$API_DOMAIN/g" > "$TEMP_CONF"
+  sed "s/API_DOMAIN/$API_DOMAIN/g" | \
+  sed "s/WS_DOMAIN/$WS_DOMAIN/g" > "$TEMP_CONF"
 mv "$TEMP_CONF" "$NGINX_CONF_DIR/default.conf"
 
 echo "[INFO] Nginx configuration generated: $NGINX_CONF_DIR/default.conf"
@@ -259,5 +316,6 @@ echo "[INFO] Domains configured:"
 echo "  - Web: $WEB_DOMAIN"
 echo "  - Widget: $WIDGET_DOMAIN"
 echo "  - API: $API_DOMAIN"
+echo "  - WebSocket: $WS_DOMAIN"
 echo "[INFO] SSL Mode: $SSL_ENABLED"
 

@@ -243,6 +243,7 @@ Config Subcommands:
   web_domain <domain>                 Set web service domain (e.g., www.talkgo.cn)
   widget_domain <domain>              Set widget service domain (e.g., widget.talkgo.cn)
   api_domain <domain>                 Set API service domain (e.g., api.talkgo.cn)
+  ws_domain <domain>                  Set WebSocket service domain (e.g., ws.talkgo.cn)
   ssl_mode <auto|manual|none>         Set SSL mode (auto=Let's Encrypt, manual=custom, none=no SSL)
   ssl_email <email>                   Set Let's Encrypt email for certificate renewal
   ssl_manual <cert> <key> [domain]    Install manual SSL certificate
@@ -267,6 +268,7 @@ Domain Configuration Examples:
   ./tgo.sh config web_domain www.talkgo.cn
   ./tgo.sh config widget_domain widget.talkgo.cn
   ./tgo.sh config api_domain api.talkgo.cn
+  ./tgo.sh config ws_domain ws.talkgo.cn
   ./tgo.sh config ssl_mode auto
   ./tgo.sh config ssl_email admin@talkgo.cn
   ./tgo.sh config setup_letsencrypt
@@ -1317,6 +1319,72 @@ cmd_build() {
   fi
 }
 
+# Helper function to get protocol based on SSL mode
+get_protocol_for_ssl_mode() {
+  local ssl_mode="${1:-none}"
+  if [ "$ssl_mode" = "none" ]; then
+    echo "http"
+  else
+    echo "https"
+  fi
+}
+
+# Helper function to update domain-related environment variables
+update_domain_env_vars() {
+  local domain_config_file="./data/.tgo-domain-config"
+
+  # Load current domain configuration
+  local ssl_mode="none"
+  local web_domain=""
+  local widget_domain=""
+  local api_domain=""
+  local ws_domain=""
+
+  if [ -f "$domain_config_file" ]; then
+    ssl_mode=$(grep -E "^SSL_MODE=" "$domain_config_file" 2>/dev/null | cut -d= -f2- || echo "none")
+    web_domain=$(grep -E "^WEB_DOMAIN=" "$domain_config_file" 2>/dev/null | cut -d= -f2- || echo "")
+    widget_domain=$(grep -E "^WIDGET_DOMAIN=" "$domain_config_file" 2>/dev/null | cut -d= -f2- || echo "")
+    api_domain=$(grep -E "^API_DOMAIN=" "$domain_config_file" 2>/dev/null | cut -d= -f2- || echo "")
+    ws_domain=$(grep -E "^WS_DOMAIN=" "$domain_config_file" 2>/dev/null | cut -d= -f2- || echo "")
+  fi
+
+  ssl_mode="${ssl_mode:-none}"
+  local protocol
+  protocol=$(get_protocol_for_ssl_mode "$ssl_mode")
+
+  # Update API domain related env vars
+  if [ -n "$api_domain" ] && [ "$api_domain" != "localhost" ]; then
+    update_env_var "VITE_API_BASE_URL" "${protocol}://${api_domain}"
+    echo "[INFO] Updated VITE_API_BASE_URL=${protocol}://${api_domain}"
+  fi
+
+  # Update Widget domain related env vars
+  if [ -n "$widget_domain" ] && [ "$widget_domain" != "localhost" ]; then
+    update_env_var "VITE_WIDGET_PREVIEW_URL" "${protocol}://${widget_domain}"
+    update_env_var "VITE_WIDGET_SCRIPT_BASE" "${protocol}://${widget_domain}/tgo-widget-sdk.js"
+    update_env_var "VITE_WIDGET_DEMO_URL" "${protocol}://${widget_domain}/demo.html"
+    echo "[INFO] Updated VITE_WIDGET_PREVIEW_URL=${protocol}://${widget_domain}"
+    echo "[INFO] Updated VITE_WIDGET_SCRIPT_BASE=${protocol}://${widget_domain}/tgo-widget-sdk.js"
+    echo "[INFO] Updated VITE_WIDGET_DEMO_URL=${protocol}://${widget_domain}/demo.html"
+  fi
+
+  # Update WuKongIM WebSocket domain related env vars
+  if [ -n "$ws_domain" ] && [ "$ws_domain" != "localhost" ]; then
+    if [ "$ssl_mode" = "none" ]; then
+      update_env_var "WK_EXTERNAL_WSADDR" "ws://${ws_domain}"
+      update_env_var "WK_EXTERNAL_WSSADDR" ""
+      echo "[INFO] Updated WK_EXTERNAL_WSADDR=ws://${ws_domain}"
+    else
+      update_env_var "WK_EXTERNAL_WSADDR" ""
+      update_env_var "WK_EXTERNAL_WSSADDR" "wss://${ws_domain}"
+      echo "[INFO] Updated WK_EXTERNAL_WSSADDR=wss://${ws_domain}"
+    fi
+  fi
+
+  # Update Web domain related env vars (if any needed in the future)
+  # Currently no VITE_* vars depend on web_domain
+}
+
 cmd_config() {
   local domain_config_file="./data/.tgo-domain-config"
   local subcommand=${1:-show}
@@ -1336,6 +1404,7 @@ cmd_config() {
       sed -i.bak "s|^WEB_DOMAIN=.*|WEB_DOMAIN=$domain|" "$domain_config_file"
       rm -f "$domain_config_file.bak"
       echo "[INFO] Web domain set to: $domain"
+      update_domain_env_vars
       regenerate_nginx_config
       ;;
     widget_domain)
@@ -1348,6 +1417,7 @@ cmd_config() {
       sed -i.bak "s|^WIDGET_DOMAIN=.*|WIDGET_DOMAIN=$domain|" "$domain_config_file"
       rm -f "$domain_config_file.bak"
       echo "[INFO] Widget domain set to: $domain"
+      update_domain_env_vars
       regenerate_nginx_config
       ;;
     api_domain)
@@ -1360,6 +1430,20 @@ cmd_config() {
       sed -i.bak "s|^API_DOMAIN=.*|API_DOMAIN=$domain|" "$domain_config_file"
       rm -f "$domain_config_file.bak"
       echo "[INFO] API domain set to: $domain"
+      update_domain_env_vars
+      regenerate_nginx_config
+      ;;
+    ws_domain)
+      if [ $# -eq 0 ]; then
+        echo "[ERROR] Domain value required"
+        exit 1
+      fi
+      local domain="$1"
+      ensure_domain_config
+      sed -i.bak "s|^WS_DOMAIN=.*|WS_DOMAIN=$domain|" "$domain_config_file"
+      rm -f "$domain_config_file.bak"
+      echo "[INFO] WebSocket domain set to: $domain"
+      update_domain_env_vars
       regenerate_nginx_config
       ;;
     ssl_mode)
@@ -1376,6 +1460,9 @@ cmd_config() {
       sed -i.bak "s|^SSL_MODE=.*|SSL_MODE=$mode|" "$domain_config_file"
       rm -f "$domain_config_file.bak"
       echo "[INFO] SSL mode set to: $mode"
+      # Update all domain env vars with new protocol
+      update_domain_env_vars
+      regenerate_nginx_config
       ;;
     ssl_email)
       if [ $# -eq 0 ]; then
@@ -1429,12 +1516,15 @@ cmd_config() {
       fi
 
       local email="${SSL_EMAIL:-admin@example.com}"
+      local ws_domain="${WS_DOMAIN:-}"
       echo "[INFO] Setting up Let's Encrypt certificates..."
-      bash ./scripts/setup-ssl.sh "$WEB_DOMAIN" "$WIDGET_DOMAIN" "$API_DOMAIN" "$email"
+      bash ./scripts/setup-ssl.sh "$WEB_DOMAIN" "$WIDGET_DOMAIN" "$API_DOMAIN" "$email" "$ws_domain"
 
       sed -i.bak "s|^SSL_MODE=.*|SSL_MODE=auto|" "$domain_config_file"
       rm -f "$domain_config_file.bak"
       echo "[INFO] SSL mode set to: auto"
+      # Update env vars with new SSL mode
+      update_domain_env_vars
       ;;
     apply)
       if [ ! -f "$domain_config_file" ]; then
@@ -1461,6 +1551,7 @@ cmd_config() {
       echo "  web_domain <domain>           Set web service domain"
       echo "  widget_domain <domain>        Set widget service domain"
       echo "  api_domain <domain>           Set API service domain"
+      echo "  ws_domain <domain>            Set WebSocket service domain (WuKongIM)"
       echo "  ssl_mode <auto|manual|none>   Set SSL mode"
       echo "  ssl_email <email>             Set Let's Encrypt email"
       echo "  ssl_manual <cert> <key> [domain]  Install manual SSL certificate"
@@ -1483,11 +1574,17 @@ ensure_domain_config() {
 WEB_DOMAIN=
 WIDGET_DOMAIN=
 API_DOMAIN=
+WS_DOMAIN=
 SSL_MODE=none
 SSL_EMAIL=
 ENABLE_SSL_AUTO_RENEW=true
 EOF
     echo "[INFO] Created domain configuration file: $domain_config_file"
+  else
+    # Ensure WS_DOMAIN exists in config file (for upgrades)
+    if ! grep -q "^WS_DOMAIN=" "$domain_config_file" 2>/dev/null; then
+      echo "WS_DOMAIN=" >> "$domain_config_file"
+    fi
   fi
 }
 
