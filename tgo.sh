@@ -240,10 +240,10 @@ Commands:
   config <subcommand> [args]          Configure domains and SSL certificates
 
 Config Subcommands:
-  web_domain <domain>                 Set web service domain (e.g., www.talkgo.cn)
-  widget_domain <domain>              Set widget service domain (e.g., widget.talkgo.cn)
-  api_domain <domain>                 Set API service domain (e.g., api.talkgo.cn)
-  ws_domain <domain>                  Set WebSocket service domain (e.g., ws.talkgo.cn)
+  web_domain <domain>                 Set web service domain (e.g., www.example.com)
+  widget_domain <domain>              Set widget service domain (e.g., widget.example.com)
+  api_domain <domain>                 Set API service domain (e.g., api.example.com)
+  ws_domain <domain>                  Set WebSocket service domain (e.g., ws.example.com)
   ssl_mode <auto|manual|none>         Set SSL mode (auto=Let's Encrypt, manual=custom, none=no SSL)
   ssl_email <email>                   Set Let's Encrypt email for certificate renewal
   ssl_manual <cert> <key> [domain]    Install manual SSL certificate
@@ -265,12 +265,12 @@ Notes:
   - The 'down' command stops all services; use --volumes to also remove data volumes.
 
 Domain Configuration Examples:
-  ./tgo.sh config web_domain www.talkgo.cn
-  ./tgo.sh config widget_domain widget.talkgo.cn
-  ./tgo.sh config api_domain api.talkgo.cn
-  ./tgo.sh config ws_domain ws.talkgo.cn
+  ./tgo.sh config web_domain www.example.com
+  ./tgo.sh config widget_domain widget.example.com
+  ./tgo.sh config api_domain api.example.com
+  ./tgo.sh config ws_domain ws.example.com
   ./tgo.sh config ssl_mode auto
-  ./tgo.sh config ssl_email admin@talkgo.cn
+  ./tgo.sh config ssl_email admin@example.com
   ./tgo.sh config setup_letsencrypt
   ./tgo.sh config show
 

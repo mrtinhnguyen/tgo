@@ -27,16 +27,16 @@ echo ""
 # Configure domains
 echo -e "${YELLOW}[2/5] Configuring domains...${NC}"
 cd "$PROJECT_ROOT"
-./tgo.sh config web_domain www.talkgo.cn
-./tgo.sh config widget_domain widget.talkgo.cn
-./tgo.sh config api_domain api.talkgo.cn
+./tgo.sh config web_domain www.example.com
+./tgo.sh config widget_domain widget.example.com
+./tgo.sh config api_domain api.example.com
 echo -e "${GREEN}✓ Domains configured${NC}"
 echo ""
 
 # Configure SSL
 echo -e "${YELLOW}[3/5] Configuring SSL...${NC}"
 ./tgo.sh config ssl_mode none
-./tgo.sh config ssl_email admin@talkgo.cn
+./tgo.sh config ssl_email admin@example.com
 echo -e "${GREEN}✓ SSL configured${NC}"
 echo ""
 
@@ -56,14 +56,14 @@ echo -e "${GREEN}✓ Demo completed successfully!${NC}"
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "1. Configure DNS records:"
-echo "   www.talkgo.cn      A    <your-server-ip>"
-echo "   widget.talkgo.cn   A    <your-server-ip>"
-echo "   api.talkgo.cn      A    <your-server-ip>"
+echo "   www.example.com      A    <your-server-ip>"
+echo "   widget.example.com   A    <your-server-ip>"
+echo "   api.example.com      A    <your-server-ip>"
 echo ""
 echo "2. Start services:"
 echo "   docker-compose -f docker-compose.yml -f docker-compose.nginx.yml up -d"
 echo ""
 echo "3. Verify:"
-echo "   curl http://www.talkgo.cn"
+echo "   curl http://www.example.com"
 echo ""
 
