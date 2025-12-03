@@ -206,4 +206,5 @@ class WuKongIMRouteResponse(BaseSchema):
     """Schema for WuKongIM route (WebSocket connection address) response."""
 
     tcp_addr: str = Field(..., description="TCP connection address (format: IP:PORT)")
-    ws_addr: str = Field(..., description="WebSocket connection address (format: IP:PORT)")
+    ws_addr: str = Field(..., description="WebSocket connection address (format: ws://IP:PORT)")
+    wss_addr: Optional[str] = Field(None, description="WebSocket Secure connection address (format: wss//IP:PORT)")
