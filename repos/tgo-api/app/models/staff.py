@@ -15,6 +15,7 @@ class StaffRole(str, Enum):
     """Staff role enumeration."""
     
     USER = "user"
+    ADMIN = "admin"
     AGENT = "agent"
 
 

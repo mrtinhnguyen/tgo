@@ -966,16 +966,16 @@ cmd_install() {
 
   # Run database migrations
   echo "[INFO] Running Alembic migrations for tgo-rag..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-rag alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-rag alembic upgrade head
 
   echo "[INFO] Running Alembic migrations for tgo-ai..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-ai alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-ai alembic upgrade head
 
   echo "[INFO] Running Alembic migrations for tgo-api..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-api alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-api alembic upgrade head
 
   echo "[INFO] Running Alembic migrations for tgo-platform..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -e PYTHONPATH=. tgo-platform alembic upgrade head
+  docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T -e PYTHONPATH=. tgo-platform alembic upgrade head
 
   # Start all remaining services
   echo "[INFO] Starting all remaining services..."
@@ -1157,10 +1157,10 @@ cmd_upgrade() {
     # Step 5: Run database migrations
     echo ""
     echo "[INFO] Step 5/5: Running database migrations..."
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-rag alembic upgrade head
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-ai alembic upgrade head
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-api alembic upgrade head
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -e PYTHONPATH=. tgo-platform alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-rag alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-ai alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-api alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T -e PYTHONPATH=. tgo-platform alembic upgrade head
 
     # Start all services
     echo ""
@@ -1198,10 +1198,10 @@ cmd_upgrade() {
     # Step 4: Run database migrations
     echo ""
     echo "[INFO] Step 4/5: Running database migrations..."
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-rag alembic upgrade head
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-ai alembic upgrade head
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm tgo-api alembic upgrade head
-    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -e PYTHONPATH=. tgo-platform alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-rag alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-ai alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T tgo-api alembic upgrade head
+    docker compose --env-file "$ENV_FILE" $compose_file_args run --rm -T -e PYTHONPATH=. tgo-platform alembic upgrade head
 
     # Step 5: Start all services
     echo ""

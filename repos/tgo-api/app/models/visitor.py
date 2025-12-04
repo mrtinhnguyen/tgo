@@ -56,7 +56,12 @@ class Visitor(Base):
     nickname: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
-        comment="Visitor nickname on this platform"
+        comment="Visitor nickname on this platform (English)"
+    )
+    nickname_zh: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Visitor nickname in Chinese"
     )
     avatar_url: Mapped[Optional[str]] = mapped_column(
         String(255),

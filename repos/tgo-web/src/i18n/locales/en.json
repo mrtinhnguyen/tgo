@@ -1066,7 +1066,10 @@
     },
     "lastSeen": {
       "justNow": "Online just now",
-      "minutesAgo": "Online {{mins}} minutes ago"
+      "justNowShort": "Just now",
+      "minutesAgo": "Online {{mins}} minutes ago",
+      "minutesShort": "{{mins}} min",
+      "online": "Online"
     },
     "weekdays": {
       "0": "Sunday",

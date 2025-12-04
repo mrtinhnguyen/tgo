@@ -43,9 +43,9 @@ services:
       - ./envs/wukongim.env
     environment:
       WK_EXTERNAL_IP: ${SERVER_HOST:-127.0.0.1}
-      WK_EXTERNAL_TCPADDR: ${WK_EXTERNAL_TCPADDR:-0.0.0.0:5100}
-      WK_EXTERNAL_WSADDR: ${WK_EXTERNAL_WSADDR:-0.0.0.0:5200}
-      WK_EXTERNAL_WSSADDR: ${WK_EXTERNAL_WSSADDR:-0.0.0.0:5200}
+      WK_EXTERNAL_TCPADDR: ${WK_EXTERNAL_TCPADDR:-}
+      WK_EXTERNAL_WSADDR: ${WK_EXTERNAL_WSADDR:-}
+      WK_EXTERNAL_WSSADDR: ${WK_EXTERNAL_WSSADDR:-}
     volumes:
       - ./data/wukongim:/root/wukongim
     ports:

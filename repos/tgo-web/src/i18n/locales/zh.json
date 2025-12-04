@@ -308,7 +308,10 @@
     },
     "lastSeen": {
       "justNow": "刚刚在线",
-      "minutesAgo": "{{mins}}分钟前在线"
+      "justNowShort": "刚刚",
+      "minutesAgo": "{{mins}}分钟前在线",
+      "minutesShort": "{{mins}}分钟",
+      "online": "在线"
     },
     "weekdays": {
       "0": "星期日",

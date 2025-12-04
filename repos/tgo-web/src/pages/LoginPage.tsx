@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores';
 import { APIError } from '@/services/api';
 import type { LoginFormData, AuthValidationErrors } from '@/types';
+import { Copy, Check } from 'lucide-react';
 
 /**
  * Login Page Component
@@ -20,6 +21,10 @@ const LoginPage: React.FC = () => {
     rememberMe: false
   });
   const [errors, setErrors] = useState<AuthValidationErrors>({});
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const forgotPasswordRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
 
   // Show flash message if redirected from 401 logout
   useEffect(() => {
@@ -34,6 +39,43 @@ const LoginPage: React.FC = () => {
       }
     } catch {}
   }, []);
+
+  // Handle click outside to close popup
+  useEffect(() => {
+    if (!showForgotPassword) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        popupRef.current &&
+        !popupRef.current.contains(event.target as Node) &&
+        forgotPasswordRef.current &&
+        !forgotPasswordRef.current.contains(event.target as Node)
+      ) {
+        setShowForgotPassword(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showForgotPassword]);
+
+  // Copy command to clipboard
+  const handleCopyCommand = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const command = 'docker exec tgo-api resetadmin';
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy command:', err);
+    }
+  };
 
   // Form validation
   const validateForm = (): boolean => {
@@ -182,20 +224,61 @@ const LoginPage: React.FC = () => {
               <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.password}</p>
             )}
 
-            {/* Remember me */}
-            <div className="flex items-center mt-2">
-              <input
-                id="rememberMe"
-                name="rememberMe"
-                type="checkbox"
-                checked={formData.rememberMe}
-                onChange={handleInputChange}
-                className="h-4 w-4 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700"
-                disabled={isLoading}
-              />
-              <label htmlFor="rememberMe" className="ml-2 block text-xs text-gray-600 dark:text-gray-400">
-                {t('auth.login.rememberMe')}
-              </label>
+            {/* Remember me and Forgot password */}
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center">
+                <input
+                  id="rememberMe"
+                  name="rememberMe"
+                  type="checkbox"
+                  checked={formData.rememberMe}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700"
+                  disabled={isLoading}
+                />
+                <label htmlFor="rememberMe" className="ml-2 block text-xs text-gray-600 dark:text-gray-400">
+                  {t('auth.login.rememberMe')}
+                </label>
+              </div>
+              <div className="relative" ref={forgotPasswordRef}>
+                <button
+                  type="button"
+                  onMouseEnter={() => setShowForgotPassword(true)}
+                  onClick={() => setShowForgotPassword(!showForgotPassword)}
+                  className="text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+                >
+                  {t('auth.login.forgotPassword', '忘记密码?')}
+                </button>
+                {showForgotPassword && (
+                  <div
+                    ref={popupRef}
+                    className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4 z-50"
+                    style={{ minWidth: '320px' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-xs text-gray-700 dark:text-gray-300 mb-3">
+                      {t('auth.login.resetAdminInstruction', '执行以下命令可重置 admin 用户')}
+                    </p>
+                    <div className="bg-gray-900 dark:bg-black rounded-md p-3 flex items-center gap-2 group">
+                      <code className="text-white text-xs font-mono flex-1 whitespace-nowrap min-w-0">
+                        docker exec tgo-api resetadmin
+                      </code>
+                      <button
+                        type="button"
+                        onClick={handleCopyCommand}
+                        className="p-1.5 text-gray-400 hover:text-white transition-colors rounded hover:bg-gray-800 dark:hover:bg-gray-700 flex-shrink-0"
+                        title={copied ? t('auth.login.copied', '已复制') : t('auth.login.copy', '复制')}
+                      >
+                        {copied ? (
+                          <Check className="w-4 h-4 text-green-400" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

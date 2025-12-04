@@ -1,10 +1,10 @@
 """Security utilities for authentication and authorization."""
 
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Literal, Optional, Union
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -16,6 +16,27 @@ from app.core.logging import get_logger
 from app.models import Project, Staff
 
 logger = get_logger("security")
+
+# Supported user languages
+UserLanguage = Literal["zh", "en"]
+DEFAULT_LANGUAGE: UserLanguage = "en"
+
+
+def get_user_language(
+    x_user_language: Optional[str] = Header(None, alias="x-user-language"),
+) -> UserLanguage:
+    """
+    Get user language from request header.
+
+    Args:
+        x_user_language: Language code from 'x-user-language' header
+
+    Returns:
+        'zh' for Chinese, 'en' for English (default)
+    """
+    if x_user_language and x_user_language.lower() == "zh":
+        return "zh"
+    return "en"
 
 # Password hashing
 pwd_context = CryptContext(

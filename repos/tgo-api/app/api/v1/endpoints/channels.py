@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.database import get_db
-from app.core.security import verify_token
+from app.core.security import verify_token, get_user_language, UserLanguage
 from app.models import Staff, Visitor, VisitorTag, VisitorActivity, Platform
 from app.schemas.visitor import (
     VisitorResponse,
@@ -17,6 +17,8 @@ from app.schemas.visitor import (
     VisitorAIInsightResponse,
     VisitorSystemInfoResponse,
     VisitorActivityResponse,
+    set_visitor_display_nickname,
+    resolve_visitor_display_name,
 )
 from app.schemas import TagResponse
 from app.services.ai_client import ai_client
@@ -169,9 +171,16 @@ def _build_visitor_channel_response(
     visitor_payload: VisitorResponse,
     channel_id: str,
     channel_type: int,
+    user_language: UserLanguage = "en",
 ) -> ChannelInfoResponse:
     """Build channel response for visitor entity."""
-    name = visitor.name or visitor.nickname or "Unknown Visitor"
+    name = resolve_visitor_display_name(
+        name=visitor.name,
+        nickname=visitor.nickname,
+        nickname_zh=visitor.nickname_zh,
+        language=user_language,
+        fallback="Unknown Visitor",
+    )
     avatar = visitor_payload.avatar_url or ""
     return ChannelInfoResponse(
         name=name,
@@ -317,6 +326,7 @@ async def get_channel_info(
     x_platform_api_key: Optional[str] = Header(None, alias="X-Platform-API-Key"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
     db: Session = Depends(get_db),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> ChannelInfoResponse:
     """Retrieve channel information for a given channel_id and channel_type.
 
@@ -370,6 +380,7 @@ async def get_channel_info(
             current_user=current_user,
             db=db,
             accept_language=accept_language,
+            user_language=user_language,
         )
 
     # If authenticated via Platform API key, restrict to staff/agent personal channels
@@ -379,6 +390,7 @@ async def get_channel_info(
             channel_type=channel_type,
             platform=platform,
             db=db,
+            user_language=user_language,
         )
 
     # Unsupported or unauthorized
@@ -391,6 +403,7 @@ async def _handle_staff_auth_channel_info(
     current_user: Staff,
     db: Session,
     accept_language: Optional[str],
+    user_language: UserLanguage = "en",
 ) -> ChannelInfoResponse:
     """Handle channel info request for JWT authenticated staff."""
     # CUSTOMER SERVICE CHANNEL (251): decode Base62 and extract visitor_id
@@ -401,6 +414,7 @@ async def _handle_staff_auth_channel_info(
             project_id=current_user.project_id,
             db=db,
             accept_language=accept_language,
+            user_language=user_language,
         )
 
     # PERSONAL CHANNEL (1)
@@ -412,7 +426,7 @@ async def _handle_staff_auth_channel_info(
                 channel_type=channel_type,
                 project_id=current_user.project_id,
                 db=db,
-                )
+            )
 
         # Agent channel
         if channel_id.endswith(AGENT_SUFFIX):
@@ -437,6 +451,7 @@ async def _handle_staff_auth_channel_info(
             project_id=current_user.project_id,
             db=db,
             accept_language=accept_language,
+            user_language=user_language,
         )
 
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported channel_type")
@@ -447,6 +462,7 @@ async def _handle_platform_auth_channel_info(
     channel_type: int,
     platform: Platform,
     db: Session,
+    user_language: UserLanguage = "en",
 ) -> ChannelInfoResponse:
     """Handle channel info request for Platform API key authentication."""
     # Only allow channel_type==1 and channel_id ending with '-staff', '-agent', or '-team'
@@ -509,6 +525,7 @@ async def _get_customer_service_channel_info(
     project_id: UUID,
     db: Session,
     accept_language: Optional[str],
+    user_language: UserLanguage = "en",
 ) -> ChannelInfoResponse:
     """Get channel info for customer service channel (type 251)."""
     try:
@@ -521,7 +538,8 @@ async def _get_customer_service_channel_info(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
 
     visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language)
-    return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type)
+    set_visitor_display_nickname(visitor_payload, user_language)
+    return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type, user_language)
 
 
 def _get_staff_channel_info(
@@ -581,10 +599,10 @@ async def _get_agent_channel_info(
     avatar = agent_data.get("avatar_url", "") or ""
 
     return ChannelInfoResponse(
-            name=name,
-            avatar=avatar,
-            channel_id=channel_id,
-            channel_type=channel_type,
+        name=name,
+        avatar=avatar,
+        channel_id=channel_id,
+        channel_type=channel_type,
         entity_type="agent",
         extra=agent_data,
     )
@@ -633,6 +651,7 @@ def _get_personal_visitor_channel_info(
     project_id: UUID,
     db: Session,
     accept_language: Optional[str],
+    user_language: UserLanguage = "en",
 ) -> ChannelInfoResponse:
     """Get channel info for visitor personal channel (no suffix)."""
     try:
@@ -645,4 +664,5 @@ def _get_personal_visitor_channel_info(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
 
     visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language)
-    return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type)
+    set_visitor_display_nickname(visitor_payload, user_language)
+    return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type, user_language)

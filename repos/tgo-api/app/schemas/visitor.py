@@ -103,7 +103,12 @@ class VisitorBase(BaseSchema):
     nickname: Optional[str] = Field(
         None,
         max_length=100,
-        description="Visitor nickname on this platform"
+        description="Visitor nickname on this platform (English)"
+    )
+    nickname_zh: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="Visitor nickname in Chinese"
     )
     avatar_url: Optional[str] = Field(
         None,
@@ -169,7 +174,12 @@ class VisitorAttributesUpdate(BaseSchema):
     nickname: Optional[str] = Field(
         None,
         max_length=100,
-        description="Updated visitor nickname"
+        description="Updated visitor nickname (English)"
+    )
+    nickname_zh: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="Updated visitor nickname in Chinese"
     )
     avatar_url: Optional[str] = Field(
         None,
@@ -254,6 +264,10 @@ class VisitorResponse(VisitorInDB):
         None,
         description="Whether AI responses are disabled for this visitor"
     )
+    display_nickname: Optional[str] = Field(
+        None,
+        description="Display nickname based on client language (nickname_zh for zh, nickname for others)"
+    )
     tags: List[TagResponse] = Field(default_factory=list, description="Associated visitor tags")
     ai_profile: Optional[VisitorAIProfileResponse] = Field(None, description="AI persona data")
     ai_insights: Optional[VisitorAIInsightResponse] = Field(None, description="AI insight metrics")
@@ -272,7 +286,12 @@ class VisitorBasicResponse(BaseSchema):
 
     id: UUID = Field(..., description="Visitor ID")
     name: Optional[str] = Field(None, description="Visitor real name")
-    nickname: Optional[str] = Field(None, description="Visitor nickname on this platform")
+    nickname: Optional[str] = Field(None, description="Visitor nickname on this platform (English)")
+    nickname_zh: Optional[str] = Field(None, description="Visitor nickname in Chinese")
+    display_nickname: Optional[str] = Field(
+        None,
+        description="Display nickname based on client language (nickname_zh for zh, nickname for others)"
+    )
     avatar_url: Optional[str] = Field(None, description="Visitor avatar URL on this platform")
     platform_open_id: str = Field(..., description="Visitor unique identifier on this platform")
     platform_id: UUID = Field(..., description="Associated platform ID")
@@ -338,3 +357,100 @@ class VisitorAvatarUploadResponse(BaseSchema):
     file_size: int = Field(..., description="File size in bytes")
     file_type: str = Field(..., description="MIME type of the file")
     uploaded_at: datetime = Field(..., description="Upload timestamp")
+
+
+# Helper functions for language-aware display
+
+def resolve_display_nickname(
+    nickname: Optional[str],
+    nickname_zh: Optional[str],
+    language: str = "en",
+) -> Optional[str]:
+    """
+    Resolve display nickname based on user language.
+
+    Args:
+        nickname: English nickname
+        nickname_zh: Chinese nickname
+        language: User language code ('zh' or 'en')
+
+    Returns:
+        nickname_zh if language is 'zh', otherwise nickname
+    """
+    if language == "zh":
+        return nickname_zh or nickname
+    return nickname or nickname_zh
+
+
+def resolve_visitor_display_name(
+    name: Optional[str],
+    nickname: Optional[str],
+    nickname_zh: Optional[str],
+    language: str = "en",
+    fallback: str = "Unknown Visitor",
+) -> str:
+    """
+    Resolve visitor display name based on user language.
+
+    Priority:
+    1. name (if exists)
+    2. nickname_zh (if language is 'zh')
+    3. nickname (default)
+    4. fallback value
+
+    Args:
+        name: Visitor's real name
+        nickname: English nickname
+        nickname_zh: Chinese nickname
+        language: User language code ('zh' or 'en')
+        fallback: Fallback value if no name available
+
+    Returns:
+        The resolved display name
+    """
+    if name:
+        return name
+    if language == "zh":
+        return nickname_zh or nickname or fallback
+    return nickname or nickname_zh or fallback
+
+
+def set_visitor_display_nickname(
+    response: Union[VisitorResponse, VisitorBasicResponse],
+    language: str = "en",
+) -> Union[VisitorResponse, VisitorBasicResponse]:
+    """
+    Set display_nickname field on visitor response based on language.
+
+    Args:
+        response: Visitor response object
+        language: User language code ('zh' or 'en')
+
+    Returns:
+        The same response object with display_nickname set
+    """
+    response.display_nickname = resolve_display_nickname(
+        response.nickname,
+        response.nickname_zh,
+        language,
+    )
+    return response
+
+
+def set_visitor_list_display_nickname(
+    responses: List[Union[VisitorResponse, VisitorBasicResponse]],
+    language: str = "en",
+) -> List[Union[VisitorResponse, VisitorBasicResponse]]:
+    """
+    Set display_nickname field on a list of visitor responses.
+
+    Args:
+        responses: List of visitor response objects
+        language: User language code ('zh' or 'en')
+
+    Returns:
+        The same list with display_nickname set on each item
+    """
+    for response in responses:
+        set_visitor_display_nickname(response, language)
+    return responses

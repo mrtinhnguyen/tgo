@@ -33,7 +33,7 @@ from app.utils.encoding import (
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_active_user
+from app.core.security import get_current_active_user, get_user_language, UserLanguage
 from app.models import (
     Platform,
     Staff,
@@ -61,6 +61,7 @@ from app.schemas import (
     VisitorActivityCreateRequest,
     VisitorActivityCreateResponse,
 )
+from app.schemas.visitor import set_visitor_display_nickname, set_visitor_list_display_nickname
 
 from app.schemas.wukongim import WuKongIMChannelMessageSyncResponse
 
@@ -71,7 +72,8 @@ class VisitorRegisterRequest(BaseModel):
     platform_open_id: Optional[str] = None
     # Optional profile fields (aligned with VisitorBase)
     name: Optional[str] = None
-    nickname: Optional[str] = None
+    nickname: Optional[str] = Field(None, description="Visitor nickname in English")
+    nickname_zh: Optional[str] = Field(None, description="Visitor nickname in Chinese")
     avatar_url: Optional[str] = Field(None, description="Visitor avatar URL")
     phone_number: Optional[str] = None
     email: Optional[str] = None
@@ -128,7 +130,8 @@ DEFAULT_VISITOR_NAMES = [
     "Ella Carter",
 ]
 
-CUSTOMER_SERVICE_ADJECTIVES = [
+# Chinese nickname components
+CUSTOMER_SERVICE_ADJECTIVES_ZH = [
     "星光",
     "温暖",
     "清晨",
@@ -143,7 +146,7 @@ CUSTOMER_SERVICE_ADJECTIVES = [
     "暮色",
 ]
 
-CUSTOMER_SERVICE_NOUNS = [
+CUSTOMER_SERVICE_NOUNS_ZH = [
     "海豚",
     "星猫",
     "向日葵",
@@ -156,6 +159,37 @@ CUSTOMER_SERVICE_NOUNS = [
     "薰衣草",
     "流萤",
     "橄榄树",
+]
+
+# English nickname components
+CUSTOMER_SERVICE_ADJECTIVES_EN = [
+    "Starry",
+    "Warm",
+    "Morning",
+    "Sunny",
+    "Bright",
+    "Breezy",
+    "Cloud",
+    "Quiet",
+    "Swift",
+    "Shiny",
+    "Calm",
+    "Twilight",
+]
+
+CUSTOMER_SERVICE_NOUNS_EN = [
+    "Dolphin",
+    "Cat",
+    "Sunflower",
+    "Pine",
+    "Swallow",
+    "Dew",
+    "Coral",
+    "Fox",
+    "Boat",
+    "Lavender",
+    "Firefly",
+    "Olive",
 ]
 
 
@@ -179,12 +213,15 @@ def _generate_default_visitor_name(visitor_id: str) -> str:
     return DEFAULT_VISITOR_NAMES[index]
 
 
-def _generate_customer_service_nickname(identifier: Optional[str]) -> str:
+def _generate_customer_service_nickname(identifier: Optional[str]) -> tuple[str, str]:
     """
-    Generate a friendly fallback nickname for visitor-facing scenarios.
+    Generate friendly fallback nicknames for visitor-facing scenarios.
 
     Combines curated adjective/noun pairs for flavor and adds a short suffix
     derived from the identifier to keep names stable yet varied.
+
+    Returns:
+        A tuple of (english_nickname, chinese_nickname)
     """
     base_identifier = (identifier or "").strip()
     if not base_identifier:
@@ -192,22 +229,50 @@ def _generate_customer_service_nickname(identifier: Optional[str]) -> str:
 
     digest = hashlib.sha256(base_identifier.encode("utf-8")).digest()
 
-    adjective = CUSTOMER_SERVICE_ADJECTIVES[digest[0] % len(CUSTOMER_SERVICE_ADJECTIVES)]
-    noun = CUSTOMER_SERVICE_NOUNS[digest[1] % len(CUSTOMER_SERVICE_NOUNS)]
+    # English nickname
+    adjective_en = CUSTOMER_SERVICE_ADJECTIVES_EN[digest[0] % len(CUSTOMER_SERVICE_ADJECTIVES_EN)]
+    noun_en = CUSTOMER_SERVICE_NOUNS_EN[digest[1] % len(CUSTOMER_SERVICE_NOUNS_EN)]
+
+    # Chinese nickname
+    adjective_zh = CUSTOMER_SERVICE_ADJECTIVES_ZH[digest[0] % len(CUSTOMER_SERVICE_ADJECTIVES_ZH)]
+    noun_zh = CUSTOMER_SERVICE_NOUNS_ZH[digest[1] % len(CUSTOMER_SERVICE_NOUNS_ZH)]
 
     suffix_value = int.from_bytes(digest[2:4], byteorder="big")
     suffix = format(suffix_value, "x").upper()[:3]
 
-    return f"{adjective}{noun}{suffix}"
+    nickname_en = f"{adjective_en}{noun_en}{suffix}"
+    nickname_zh = f"{adjective_zh}{noun_zh}{suffix}"
+
+    return nickname_en, nickname_zh
 
 
-def _resolve_visitor_nickname(provided_nickname: Optional[str], identifier: Optional[str]) -> str:
-    """Return a cleaned nickname or generate a default one when blank."""
-    if provided_nickname:
-        cleaned = provided_nickname.strip()
-        if cleaned:
-            return cleaned
-    return _generate_customer_service_nickname(identifier)
+def _resolve_visitor_nickname(
+    provided_nickname: Optional[str],
+    provided_nickname_zh: Optional[str],
+    identifier: Optional[str],
+) -> tuple[str, str]:
+    """
+    Return cleaned nicknames or generate defaults when blank.
+
+    Args:
+        provided_nickname: English nickname from request
+        provided_nickname_zh: Chinese nickname from request
+        identifier: Identifier used to generate deterministic nicknames
+
+    Returns:
+        A tuple of (english_nickname, chinese_nickname)
+    """
+    nickname_en = (provided_nickname or "").strip()
+    nickname_zh = (provided_nickname_zh or "").strip()
+
+    # If both are provided, return them
+    if nickname_en and nickname_zh:
+        return nickname_en, nickname_zh
+
+    # Generate defaults for missing nicknames
+    generated_en, generated_zh = _generate_customer_service_nickname(identifier)
+
+    return nickname_en or generated_en, nickname_zh or generated_zh
 
 
 async def _ensure_visitor_channel(
@@ -320,6 +385,7 @@ async def _create_visitor_with_channel(
     platform_open_id: str,
     name: Optional[str] = None,
     nickname: Optional[str] = None,
+    nickname_zh: Optional[str] = None,
     avatar_url: Optional[str] = None,
     phone_number: Optional[str] = None,
     email: Optional[str] = None,
@@ -340,7 +406,8 @@ async def _create_visitor_with_channel(
         platform: Platform object
         platform_open_id: Platform open ID for the visitor
         name: Optional visitor name
-        nickname: Optional visitor nickname (will be auto-generated if not provided)
+        nickname: Optional visitor nickname in English (will be auto-generated if not provided)
+        nickname_zh: Optional visitor nickname in Chinese (will be auto-generated if not provided)
         avatar_url: Optional avatar URL
         phone_number: Optional phone number
         email: Optional email
@@ -356,8 +423,8 @@ async def _create_visitor_with_channel(
     Raises:
         Exception: If WuKongIM channel creation fails (logged but not raised)
     """
-    # Resolve nickname (generate if not provided)
-    resolved_nickname = _resolve_visitor_nickname(nickname, platform_open_id)
+    # Resolve nicknames (generate if not provided)
+    resolved_nickname, resolved_nickname_zh = _resolve_visitor_nickname(nickname, nickname_zh, platform_open_id)
 
     # Create visitor record
     visitor = Visitor(
@@ -366,6 +433,7 @@ async def _create_visitor_with_channel(
         platform_open_id=platform_open_id,
         name=name,
         nickname=resolved_nickname,
+        nickname_zh=resolved_nickname_zh,
         avatar_url=avatar_url,
         phone_number=phone_number,
         email=email,
@@ -447,6 +515,7 @@ async def list_visitors(
     params: VisitorListParams = Depends(),
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorListResponse:
     """
     List visitors.
@@ -486,6 +555,7 @@ async def list_visitors(
     visitor_responses = [VisitorResponse.model_validate(visitor) for visitor in visitors]
     for vr in visitor_responses:
         localize_visitor_response_intent(vr, accept_language)
+    set_visitor_list_display_nickname(visitor_responses, user_language)
 
     return VisitorListResponse(
         data=visitor_responses,
@@ -505,6 +575,7 @@ async def create_visitor(
     visitor_data: VisitorCreate,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorResponse:
     """
     Create visitor.
@@ -559,6 +630,7 @@ async def create_visitor(
         platform_open_id=visitor_data.platform_open_id,
         name=visitor_data.name,
         nickname=visitor_data.nickname,
+        nickname_zh=visitor_data.nickname_zh,
         avatar_url=visitor_data.avatar_url,
         phone_number=visitor_data.phone_number,
         email=visitor_data.email,
@@ -579,6 +651,7 @@ async def create_visitor(
 
     response = VisitorResponse.model_validate(visitor)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
+    set_visitor_display_nickname(response, user_language)
     return response
 
 @router.post("/register", response_model=VisitorRegisterResponse, status_code=status.HTTP_201_CREATED)
@@ -586,6 +659,7 @@ async def register_visitor(
     request: Request,
     req: VisitorRegisterRequest,
     db: Session = Depends(get_db),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorRegisterResponse:
     """Register a visitor using a Platform API key (visitor-facing use).
 
@@ -630,7 +704,7 @@ async def register_visitor(
         # If normalized_open_id is empty, we need to create visitor first to get its ID
         if not normalized_open_id:
             # Special case: create visitor with pending ID, then update with visitor.id
-            resolved_nickname = _resolve_visitor_nickname(req.nickname, None)
+            resolved_nickname, resolved_nickname_zh = _resolve_visitor_nickname(req.nickname, req.nickname_zh, None)
             initial_platform_open_id = f"pending-{uuid.uuid4().hex}"
             visitor = Visitor(
                 project_id=platform.project_id,
@@ -638,6 +712,7 @@ async def register_visitor(
                 platform_open_id=initial_platform_open_id,
                 name=req.name,
                 nickname=resolved_nickname,
+                nickname_zh=resolved_nickname_zh,
                 avatar_url=req.avatar_url,
                 phone_number=req.phone_number,
                 email=req.email,
@@ -663,6 +738,7 @@ async def register_visitor(
                 platform_open_id=normalized_open_id,
                 name=req.name,
                 nickname=req.nickname,
+                nickname_zh=req.nickname_zh,
                 avatar_url=req.avatar_url,
                 phone_number=req.phone_number,
                 email=req.email,
@@ -677,14 +753,18 @@ async def register_visitor(
         # Update existing visitor with non-None fields provided in request
         update_data = req.model_dump(exclude_unset=True)
 
-        if "nickname" in update_data:
-            update_data["nickname"] = _resolve_visitor_nickname(
-                update_data["nickname"],
+        # Handle nickname updates
+        if "nickname" in update_data or "nickname_zh" in update_data:
+            resolved_nickname, resolved_nickname_zh = _resolve_visitor_nickname(
+                update_data.get("nickname"),
+                update_data.get("nickname_zh"),
                 normalized_open_id or str(visitor.id),
             )
+            update_data["nickname"] = resolved_nickname
+            update_data["nickname_zh"] = resolved_nickname_zh
 
         updatable_fields = [
-            "name", "nickname", "avatar_url", "phone_number", "email",
+            "name", "nickname", "nickname_zh", "avatar_url", "phone_number", "email",
             "company", "job_title", "source", "note", "custom_attributes",
         ]
         any_updated = False
@@ -739,6 +819,7 @@ async def register_visitor(
         "im_token": im_token,
     })
     localize_visitor_response_intent(resp, request.headers.get("Accept-Language"))
+    set_visitor_display_nickname(resp, user_language)
     return resp
 
 
@@ -877,6 +958,7 @@ async def get_visitor_by_channel(
     channel_type: int,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorResponse:
     """Get visitor details by channel identifiers.
 
@@ -916,6 +998,7 @@ async def get_visitor_by_channel(
 
     response = VisitorResponse.model_validate(visitor)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
+    set_visitor_display_nickname(response, user_language)
     return response
 
 
@@ -923,6 +1006,7 @@ async def get_visitor_by_channel(
 async def get_visitor_basic(
     visitor_id: UUID,
     db: Session = Depends(get_db),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorBasicResponse:
     """Get basic visitor information without heavy related entities.
 
@@ -943,7 +1027,9 @@ async def get_visitor_basic(
     if not visitor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
 
-    return VisitorBasicResponse.model_validate(visitor)
+    response = VisitorBasicResponse.model_validate(visitor)
+    set_visitor_display_nickname(response, user_language)
+    return response
 
 
 
@@ -954,6 +1040,7 @@ async def get_visitor(
     visitor_id: str,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorResponse:
     """Get visitor details."""
     logger.info(f"User {current_user.username} getting visitor: {visitor_id}")
@@ -1021,6 +1108,7 @@ async def get_visitor(
             platform_open_id=f"default_{visitor_id}",
             name=default_name,
             nickname=None,
+            nickname_zh=None,
             avatar_url=None,
             phone_number=None,
             email=None,
@@ -1044,6 +1132,7 @@ async def get_visitor(
             recent_activities=[],
         )
 
+        set_visitor_display_nickname(default_visitor_response, user_language)
         return default_visitor_response
 
     active_tags = [
@@ -1086,7 +1175,7 @@ async def get_visitor(
     ]
 
     visitor_payload = VisitorResponse.model_validate(visitor)
-    return visitor_payload.model_copy(
+    response = visitor_payload.model_copy(
         update={
             "tags": tag_responses,
             "ai_profile": ai_profile_response,
@@ -1095,6 +1184,8 @@ async def get_visitor(
             "recent_activities": recent_activity_responses,
         }
     )
+    set_visitor_display_nickname(response, user_language)
+    return response
 
 
 @router.put("/{visitor_id}/attributes", response_model=VisitorResponse)
@@ -1104,6 +1195,7 @@ async def set_visitor_attributes(
     attributes: VisitorAttributesUpdate,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorResponse:
     """Set visitor profile attributes including custom fields."""
     logger.info(f"User {current_user.username} setting attributes for visitor: {visitor_id}")
@@ -1201,6 +1293,7 @@ async def set_visitor_attributes(
 
     response = VisitorResponse.model_validate(visitor)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
+    set_visitor_display_nickname(response, user_language)
     return response
 
 
@@ -1212,6 +1305,7 @@ async def update_visitor(
     visitor_data: VisitorUpdate,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorResponse:
     """
     Update visitor.
@@ -1253,6 +1347,7 @@ async def update_visitor(
 
     response = VisitorResponse.model_validate(visitor)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
+    set_visitor_display_nickname(response, user_language)
     return response
 
 
@@ -1263,6 +1358,7 @@ async def enable_ai_for_visitor(
     visitor_id: UUID,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorResponse:
     """Enable AI for a visitor (set ai_disabled=False)."""
     logger.info("User %s enabling AI for visitor %s", current_user.username, str(visitor_id))
@@ -1289,6 +1385,7 @@ async def enable_ai_for_visitor(
     await notify_visitor_profile_updated(db, visitor)
     response = VisitorResponse.model_validate(visitor)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
+    set_visitor_display_nickname(response, user_language)
     return response
 
 
@@ -1298,6 +1395,7 @@ async def disable_ai_for_visitor(
     visitor_id: UUID,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> VisitorResponse:
     """Disable AI for a visitor (set ai_disabled=True)."""
     logger.info("User %s disabling AI for visitor %s", current_user.username, str(visitor_id))
@@ -1324,6 +1422,7 @@ async def disable_ai_for_visitor(
     await notify_visitor_profile_updated(db, visitor)
     response = VisitorResponse.model_validate(visitor)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
+    set_visitor_display_nickname(response, user_language)
     return response
 
 

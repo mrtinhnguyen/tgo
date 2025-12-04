@@ -143,13 +143,17 @@ async def get_setup_status(
     )
 
 
+# Fixed admin username
+ADMIN_USERNAME = "admin"
+
+
 @router.post(
     "/admin",
     response_model=CreateAdminResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create first admin account",
     description="Create the system's first administrator account and default project. "
-                "This endpoint can only be called once during initial setup."
+                "Username is fixed as 'admin'. This endpoint can only be called once during initial setup."
 )
 async def create_admin(
     admin_data: CreateAdminRequest,
@@ -162,7 +166,7 @@ async def create_admin(
     This endpoint:
     1. Checks that no admin exists yet
     2. Creates a default project
-    3. Creates the first admin staff member
+    3. Creates the first admin staff member (username is fixed as 'admin')
     4. Returns the created admin information
 
     Can only be called once. Returns 403 if system is already installed.
@@ -172,7 +176,7 @@ async def create_admin(
 
     # Check if admin already exists (idempotent behavior)
     existing_admin = db.query(Staff).filter(
-        Staff.username == admin_data.username,
+        Staff.username == ADMIN_USERNAME,
         Staff.deleted_at.is_(None)
     ).first()
 
@@ -180,11 +184,11 @@ async def create_admin(
         # Return existing admin info for idempotency
         project = existing_admin.project
         logger.info(
-            f"Admin already exists, returning existing info for idempotency: {existing_admin.username}"
+            f"Admin already exists, returning existing info for idempotency: {ADMIN_USERNAME}"
         )
         return CreateAdminResponse(
             id=existing_admin.id,
-            username=existing_admin.username,
+            username=ADMIN_USERNAME,
             nickname=existing_admin.nickname,
             project_id=project.id if project else existing_admin.project_id,
             project_name=project.name if project else "Unknown",
@@ -249,13 +253,13 @@ async def create_admin(
     # Hash password
     password_hash = get_password_hash(admin_data.password)
 
-    # Create admin staff member
+    # Create admin staff member (username is fixed as 'admin')
     admin = Staff(
         project_id=project.id,
-        username=admin_data.username,
+        username=ADMIN_USERNAME,
         password_hash=password_hash,
-        nickname=admin_data.nickname,
-        role=StaffRole.USER,  # Admin is a regular user role
+        nickname=admin_data.nickname or "Administrator",
+        role=StaffRole.ADMIN,  # Admin is a regular user role
         status=StaffStatus.OFFLINE,
     )
     db.add(admin)
@@ -317,6 +321,7 @@ async def create_admin(
                 platform_id=website_platform.id,
                 platform_open_id=str(uuid4()),
                 nickname="Default Visitor",
+                nickname_zh="默认访客",
                 ai_disabled=True,
             )
             db.add(default_visitor)
@@ -431,13 +436,13 @@ async def create_admin(
     db.refresh(setup)
 
     logger.info(
-        f"Created first admin: {admin.username} (ID: {admin.id}) "
+        f"Created first admin: {ADMIN_USERNAME} (ID: {admin.id}) "
         f"for project {project.name}"
     )
 
     return CreateAdminResponse(
         id=admin.id,
-        username=admin.username,
+        username=ADMIN_USERNAME,
         nickname=admin.nickname,
         project_id=project.id,
         project_name=project.name,

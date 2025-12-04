@@ -73,6 +73,10 @@ COPY . .
 # Create logs directory (as before)
 RUN mkdir -p logs
 
+# Install CLI commands (resetadmin, etc.)
+RUN chmod +x /app/scripts/resetadmin \
+    && ln -s /app/scripts/resetadmin /usr/local/bin/resetadmin
+
 # Expose ports (main + internal)
 EXPOSE 8000
 EXPOSE 8001
