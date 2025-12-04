@@ -42,7 +42,12 @@ class Tag(Base):
     name: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="Tag name"
+        comment="Tag name (English)"
+    )
+    name_zh: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Tag name in Chinese"
     )
     category: Mapped[str] = mapped_column(
         String(20),

@@ -149,8 +149,9 @@ class AgnoTeamBuilder:
         # Tool creators with their names for logging
         tool_creators: List[tuple[str, Callable]] = [
             ("handoff", self._create_handoff_tool),
-            ("customer_info", self._create_customer_info_tool),
-            ("customer_sentiment", self._create_customer_sentiment_tool),
+            ("visitor_info", self._create_visitor_info_tool),
+            ("visitor_sentiment", self._create_visitor_sentiment_tool),
+            ("visitor_tag", self._create_visitor_tag_tool),
         ]
 
         for tool_name, creator in tool_creators:
@@ -169,22 +170,31 @@ class AgnoTeamBuilder:
             self._logger.warning("Failed to add handoff tool", error=str(exc))
             return None
 
-    def _create_customer_info_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
-        """Create customer info tool with error handling."""
+    def _create_visitor_info_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
+        """Create visitor info tool with error handling."""
         try:
-            from app.runtime.tools.custom.customer_info import create_customer_info_tool
-            return create_customer_info_tool(**ctx)
+            from app.runtime.tools.custom.visitor_info import create_visitor_info_tool
+            return create_visitor_info_tool(**ctx)
         except Exception as exc:  # noqa: BLE001
-            self._logger.warning("Failed to add customer info tool", error=str(exc))
+            self._logger.warning("Failed to add visitor info tool", error=str(exc))
             return None
 
-    def _create_customer_sentiment_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
-        """Create customer sentiment tool with error handling."""
+    def _create_visitor_sentiment_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
+        """Create visitor sentiment tool with error handling."""
         try:
-            from app.runtime.tools.custom.customer_sentiment import create_customer_sentiment_tool
-            return create_customer_sentiment_tool(**ctx)
+            from app.runtime.tools.custom.visitor_sentiment import create_visitor_sentiment_tool
+            return create_visitor_sentiment_tool(**ctx)
         except Exception as exc:  # noqa: BLE001
-            self._logger.warning("Failed to add customer sentiment tool", error=str(exc))
+            self._logger.warning("Failed to add visitor sentiment tool", error=str(exc))
+            return None
+
+    def _create_visitor_tag_tool(self, ctx: Dict[str, Any]) -> Optional[Any]:
+        """Create visitor tag tool with error handling."""
+        try:
+            from app.runtime.tools.custom.visitor_tag import create_visitor_tag_tool
+            return create_visitor_tag_tool(**ctx)
+        except Exception as exc:  # noqa: BLE001
+            self._logger.warning("Failed to add visitor tag tool", error=str(exc))
             return None
 
     def _setup_memory(

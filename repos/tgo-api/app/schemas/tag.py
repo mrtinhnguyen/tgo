@@ -1,13 +1,80 @@
 """Tag schemas."""
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Literal, Optional, TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import Field, field_validator
 
 from app.models.tag import TagCategory
 from app.schemas.base import BaseSchema, PaginatedResponse, SoftDeleteMixin, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models import Tag
+
+# Type alias for user language
+UserLanguage = Literal["zh", "en"]
+
+
+def resolve_tag_display_name(
+    name: str,
+    name_zh: Optional[str],
+    language: UserLanguage = "en",
+) -> str:
+    """Resolve tag display name based on user language.
+    
+    Args:
+        name: Tag name (English)
+        name_zh: Tag name in Chinese
+        language: User's language preference ('zh' or 'en')
+    
+    Returns:
+        Display name based on language preference.
+        If language is 'zh' and name_zh exists, returns name_zh.
+        Otherwise returns name.
+    """
+    if language == "zh" and name_zh:
+        return name_zh
+    return name
+
+
+def set_tag_display_name(
+    tag_response: "TagResponse",
+    language: UserLanguage = "en",
+) -> "TagResponse":
+    """Set display_name on a TagResponse based on user language.
+    
+    Args:
+        tag_response: TagResponse object to modify
+        language: User's language preference
+    
+    Returns:
+        TagResponse with display_name set
+    """
+    tag_response.display_name = resolve_tag_display_name(
+        name=tag_response.name,
+        name_zh=tag_response.name_zh,
+        language=language,
+    )
+    return tag_response
+
+
+def set_tag_list_display_name(
+    tags: List["TagResponse"],
+    language: UserLanguage = "en",
+) -> List["TagResponse"]:
+    """Set display_name on a list of TagResponse based on user language.
+    
+    Args:
+        tags: List of TagResponse objects to modify
+        language: User's language preference
+    
+    Returns:
+        List of TagResponse with display_name set
+    """
+    for tag in tags:
+        set_tag_display_name(tag, language)
+    return tags
 
 
 class TagBase(BaseSchema):
@@ -17,7 +84,12 @@ class TagBase(BaseSchema):
         ...,
         min_length=1,
         max_length=50,
-        description="Tag name"
+        description="Tag name (English)"
+    )
+    name_zh: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Tag name in Chinese"
     )
     category: TagCategory = Field(
         ...,
@@ -49,6 +121,11 @@ class TagCreate(TagBase):
 class TagUpdate(BaseSchema):
     """Schema for updating a tag."""
     
+    name_zh: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Updated tag name in Chinese"
+    )
     weight: Optional[int] = Field(
         None,
         ge=0,
@@ -86,7 +163,11 @@ class TagInDB(TagBase, TimestampMixin, SoftDeleteMixin):
 
 class TagResponse(TagInDB):
     """Schema for tag response."""
-    pass
+    
+    display_name: Optional[str] = Field(
+        None,
+        description="Display name based on user language (name_zh for Chinese, name for others)"
+    )
 
 
 class TagListParams(BaseSchema):

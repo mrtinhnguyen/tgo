@@ -575,16 +575,16 @@ class ManualServiceRequestEvent(BaseSchema):
     )
 
 
-class CustomerInfoUpdateEvent(BaseSchema):
-    """Payload schema for customer info update events."""
+class VisitorInfoUpdateEvent(BaseSchema):
+    """Payload schema for visitor info update events."""
 
     session_id: Optional[str] = Field(
         None,
         description="Combined session identifier in the format {channel_id}@{channel_type}",
     )
-    customer: Dict[str, Any] = Field(
+    visitor: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Customer profile attributes to update. Supports an optional 'extra_info' object for additional fields.",
+        description="Visitor profile attributes to update. Supports an optional 'extra_info' object for additional fields.",
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
@@ -592,8 +592,8 @@ class CustomerInfoUpdateEvent(BaseSchema):
     )
 
 
-class CustomerSentimentUpdateEvent(BaseSchema):
-    """Payload schema for customer sentiment update events."""
+class VisitorSentimentUpdateEvent(BaseSchema):
+    """Payload schema for visitor sentiment update events."""
 
     session_id: Optional[str] = Field(
         None,
@@ -607,6 +607,44 @@ class CustomerSentimentUpdateEvent(BaseSchema):
         default_factory=dict,
         description="Additional contextual metadata for the sentiment update",
     )
+
+
+class VisitorTagItem(BaseSchema):
+    """Schema for a single tag item with multilingual support."""
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Tag name (English or primary name, used for ID generation)",
+    )
+    name_zh: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Tag name in Chinese",
+    )
+
+
+class VisitorTagEvent(BaseSchema):
+    """Payload schema for visitor tagging events."""
+
+    session_id: Optional[str] = Field(
+        None,
+        description="Combined session identifier in the format {channel_id}@{channel_type}",
+    )
+    tags: List[VisitorTagItem] = Field(
+        default_factory=list,
+        description="List of tags to add to the visitor, each with name and optional name_zh",
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional contextual metadata for the tagging operation",
+    )
+
+
+# Backward compatibility aliases
+CustomerInfoUpdateEvent = VisitorInfoUpdateEvent
+CustomerSentimentUpdateEvent = VisitorSentimentUpdateEvent
 
 
 class AIServiceEvent(BaseSchema):

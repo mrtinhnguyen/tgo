@@ -27,8 +27,9 @@ from app.models import (
 from app.schemas.ai import (
     AIServiceEvent,
     ManualServiceRequestEvent,
-    CustomerInfoUpdateEvent,
-    CustomerSentimentUpdateEvent,
+    VisitorInfoUpdateEvent,
+    VisitorSentimentUpdateEvent,
+    VisitorTagEvent,
 )
 from app.services.visitor_notifications import notify_visitor_profile_updated
 from app.utils.intent import localize_intent
@@ -38,11 +39,13 @@ logger = logging.getLogger("internal.ai_events")
 
 # Event type constants
 MANUAL_SERVICE_EVENT = "manual_service.request"
-CUSTOMER_INFO_EVENT = "customer_info.update"
-CUSTOMER_SENTIMENT_EVENT = "customer_sentiment.update"
-MANUAL_SERVICE_TAG_NAME = "人工请求"
+VISITOR_INFO_EVENT = "visitor_info.update"
+VISITOR_SENTIMENT_EVENT = "visitor_sentiment.update"
+VISITOR_TAG_EVENT = "visitor_tag.add"
+MANUAL_SERVICE_TAG_NAME = "Manual Service"
+MANUAL_SERVICE_TAG_NAME_ZH = "转人工"
 
-# Visitor field mapping for customer info updates
+# Visitor field mapping for info updates
 VISITOR_FIELD_MAP = {
     "name": "name",
     "nickname": "nickname",
@@ -74,6 +77,7 @@ def _ensure_manual_service_tag(db: Session, project_id, visitor: Visitor) -> Non
             name=MANUAL_SERVICE_TAG_NAME,
             category=TagCategory.VISITOR,
             project_id=project_id,
+            name_zh=MANUAL_SERVICE_TAG_NAME_ZH,
             description="Flag visitors who requested human assistance",
         )
         db.add(tag)
@@ -194,14 +198,14 @@ def _handle_manual_service_request(event: AIServiceEvent, project: Project, db: 
     }
 
 
-async def _handle_customer_info_update(event: AIServiceEvent, project: Project, db: Session) -> dict:
-    """Update visitor profile based on AI-provided customer info."""
-    payload = CustomerInfoUpdateEvent.model_validate(event.payload or {})
+async def _handle_visitor_info_update(event: AIServiceEvent, project: Project, db: Session) -> dict:
+    """Update visitor profile based on AI-provided visitor info."""
+    payload = VisitorInfoUpdateEvent.model_validate(event.payload or {})
 
     if event.visitor_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="visitor_id is required for customer_info.update events",
+            detail="visitor_id is required for visitor_info.update events",
         )
 
     visitor = (
@@ -218,20 +222,20 @@ async def _handle_customer_info_update(event: AIServiceEvent, project: Project, 
             detail="Visitor does not belong to the authenticated project",
         )
 
-    customer_snapshot = payload.customer or {}
-    if not isinstance(customer_snapshot, dict):
+    visitor_snapshot = payload.visitor or {}
+    if not isinstance(visitor_snapshot, dict):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="customer payload must be an object",
+            detail="visitor payload must be an object",
         )
 
-    if not customer_snapshot:
+    if not visitor_snapshot:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="customer payload cannot be empty",
+            detail="visitor payload cannot be empty",
         )
 
-    customer_data = dict(customer_snapshot)
+    visitor_data = dict(visitor_snapshot)
 
     session_id_raw = (payload.session_id or "").strip()
     channel_id = None
@@ -254,13 +258,13 @@ async def _handle_customer_info_update(event: AIServiceEvent, project: Project, 
                     detail="channel_type must be an integer",
                 ) from exc
 
-    extra_info_raw = customer_data.pop("extra_info", None)
+    extra_info_raw = visitor_data.pop("extra_info", None)
 
     changes: Dict[str, Dict[str, Any]] = {}
     custom_attributes = dict(visitor.custom_attributes or {})
     custom_attrs_modified = False
 
-    for key, value in customer_data.items():
+    for key, value in visitor_data.items():
         mapped_field = VISITOR_FIELD_MAP.get(key)
         if mapped_field:
             old_value = getattr(visitor, mapped_field)
@@ -296,10 +300,10 @@ async def _handle_customer_info_update(event: AIServiceEvent, project: Project, 
     update_entry = VisitorCustomerUpdate(
         project_id=project.id,
         visitor_id=visitor.id,
-        source=CUSTOMER_INFO_EVENT,
+        source=VISITOR_INFO_EVENT,
         channel_id=channel_id,
         channel_type=channel_type,
-        customer_snapshot=customer_snapshot,
+        customer_snapshot=visitor_snapshot,
         changes_applied=changes,
         extra_metadata=payload.metadata or {},
     )
@@ -311,7 +315,7 @@ async def _handle_customer_info_update(event: AIServiceEvent, project: Project, 
     await notify_visitor_profile_updated(db, visitor)
 
     logger.info(
-        "Visitor customer info updated",
+        "Visitor info updated",
         extra={
             "visitor_id": str(visitor.id),
             "project_id": str(project.id),
@@ -329,14 +333,14 @@ async def _handle_customer_info_update(event: AIServiceEvent, project: Project, 
     }
 
 
-async def _handle_customer_sentiment_update(event: AIServiceEvent, project: Project, db: Session) -> dict:
+async def _handle_visitor_sentiment_update(event: AIServiceEvent, project: Project, db: Session) -> dict:
     """Update visitor sentiment data based on AI-provided metrics."""
-    payload = CustomerSentimentUpdateEvent.model_validate(event.payload or {})
+    payload = VisitorSentimentUpdateEvent.model_validate(event.payload or {})
 
     if event.visitor_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="visitor_id is required for customer_sentiment.update events",
+            detail="visitor_id is required for visitor_sentiment.update events",
         )
 
     visitor = (
@@ -462,7 +466,7 @@ async def _handle_customer_sentiment_update(event: AIServiceEvent, project: Proj
     log_entry = VisitorCustomerUpdate(
         project_id=project.id,
         visitor_id=visitor.id,
-        source=CUSTOMER_SENTIMENT_EVENT,
+        source=VISITOR_SENTIMENT_EVENT,
         channel_id=channel_id,
         channel_type=channel_type,
         customer_snapshot={"sentiment": sentiment_payload},
@@ -494,6 +498,128 @@ async def _handle_customer_sentiment_update(event: AIServiceEvent, project: Proj
     }
 
 
+def _handle_visitor_tag(event: AIServiceEvent, project: Project, db: Session) -> dict:
+    """Add tags to a visitor based on AI-provided tag items."""
+    payload = VisitorTagEvent.model_validate(event.payload or {})
+
+    if event.visitor_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="visitor_id is required for visitor_tag.add events",
+        )
+
+    visitor = (
+        db.query(Visitor)
+        .filter(Visitor.id == event.visitor_id, Visitor.deleted_at.is_(None))
+        .first()
+    )
+    if not visitor:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
+
+    if visitor.project_id != project.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Visitor does not belong to the authenticated project",
+        )
+
+    tag_items = payload.tags or []
+    if not tag_items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tags list cannot be empty",
+        )
+
+    added_tags = []
+    skipped_tags = []
+
+    for tag_item in tag_items:
+        tag_name = tag_item.name.strip()
+        tag_name_zh = tag_item.name_zh.strip() if tag_item.name_zh else None
+        if not tag_name:
+            continue
+
+        # Generate tag ID and find or create the tag
+        tag_id = Tag.generate_id(tag_name, TagCategory.VISITOR)
+        tag = (
+            db.query(Tag)
+            .filter(Tag.id == tag_id, Tag.project_id == project.id)
+            .first()
+        )
+
+        if tag is None:
+            # Create new tag with both name and name_zh
+            tag = Tag(
+                name=tag_name,
+                category=TagCategory.VISITOR,
+                project_id=project.id,
+                name_zh=tag_name_zh,
+                description="Auto-created by AI service",
+            )
+            db.add(tag)
+        else:
+            # Update name_zh if provided and tag exists
+            if tag.deleted_at is not None:
+                # Restore soft-deleted tag
+                tag.deleted_at = None
+                tag.updated_at = datetime.utcnow()
+            # Update name_zh if provided and different
+            if tag_name_zh and tag.name_zh != tag_name_zh:
+                tag.name_zh = tag_name_zh
+                tag.updated_at = datetime.utcnow()
+
+        # Check if visitor already has this tag
+        visitor_tag = (
+            db.query(VisitorTag)
+            .filter(
+                VisitorTag.visitor_id == visitor.id,
+                VisitorTag.tag_id == tag.id,
+            )
+            .first()
+        )
+
+        # Build tag info for response
+        tag_info = {"name": tag_name}
+        if tag_name_zh:
+            tag_info["name_zh"] = tag_name_zh
+
+        if visitor_tag is None:
+            # Create new visitor-tag association
+            visitor_tag = VisitorTag(
+                project_id=project.id,
+                visitor_id=visitor.id,
+                tag_id=tag.id,
+            )
+            db.add(visitor_tag)
+            added_tags.append(tag_info)
+        elif visitor_tag.deleted_at is not None:
+            # Restore soft-deleted association
+            visitor_tag.deleted_at = None
+            visitor_tag.updated_at = datetime.utcnow()
+            added_tags.append(tag_info)
+        else:
+            # Tag already exists for this visitor
+            skipped_tags.append(tag_info)
+
+    db.commit()
+
+    logger.info(
+        "Visitor tags added",
+        extra={
+            "visitor_id": str(visitor.id),
+            "project_id": str(project.id),
+            "added_tags": added_tags,
+            "skipped_tags": skipped_tags,
+        },
+    )
+
+    return {
+        "visitor_id": str(visitor.id),
+        "added_tags": added_tags,
+        "skipped_tags": skipped_tags,
+        "total_requested": len(tag_items),
+    }
+
+
 INTERNAL_AI_EVENTS_DESCRIPTION = """
 **Internal endpoint for AI Service (no authentication required).**
 
@@ -506,8 +632,9 @@ protected by network-level security (firewall, VPC, etc.).
 Supported event types:
 
 * `manual_service.request` — create a manual service request record.
-* `customer_info.update` — update visitor profile using provided customer data.
-* `customer_sentiment.update` — update visitor sentiment metrics.
+* `visitor_info.update` — update visitor profile using provided visitor data.
+* `visitor_sentiment.update` — update visitor sentiment metrics.
+* `visitor_tag.add` — add tags to a visitor.
 
 **Required Fields**:
 - `event_type`: The type of event (see above)
@@ -612,12 +739,16 @@ async def ingest_ai_event_internal(
         result = _handle_manual_service_request(event, project, db)
         return {"event_type": event_type, "result": result}
 
-    if event_type == CUSTOMER_INFO_EVENT:
-        result = await _handle_customer_info_update(event, project, db)
+    if event_type == VISITOR_INFO_EVENT:
+        result = await _handle_visitor_info_update(event, project, db)
         return {"event_type": event_type, "result": result}
 
-    if event_type == CUSTOMER_SENTIMENT_EVENT:
-        result = await _handle_customer_sentiment_update(event, project, db)
+    if event_type == VISITOR_SENTIMENT_EVENT:
+        result = await _handle_visitor_sentiment_update(event, project, db)
+        return {"event_type": event_type, "result": result}
+
+    if event_type == VISITOR_TAG_EVENT:
+        result = _handle_visitor_tag(event, project, db)
         return {"event_type": event_type, "result": result}
 
     logger.warning(

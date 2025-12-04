@@ -21,6 +21,7 @@ from app.schemas.visitor import (
     resolve_visitor_display_name,
 )
 from app.schemas import TagResponse
+from app.schemas.tag import set_tag_list_display_name
 from app.services.ai_client import ai_client
 
 from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE
@@ -98,6 +99,7 @@ def _build_enriched_visitor_payload(
     db: Session,
     project_id: UUID,
     accept_language: Optional[str] = None,
+    user_language: UserLanguage = "en",
 ) -> VisitorResponse:
     """Build enriched visitor payload with tags, AI profile/insights, system info, and activities."""
     active_tags = [
@@ -106,6 +108,7 @@ def _build_enriched_visitor_payload(
         if vt.deleted_at is None and vt.tag and vt.tag.deleted_at is None
     ]
     tag_responses = [TagResponse.model_validate(tag) for tag in active_tags]
+    set_tag_list_display_name(tag_responses, user_language)
 
     ai_profile_response = (
         VisitorAIProfileResponse.model_validate(visitor.ai_profile) if visitor.ai_profile else None
@@ -537,7 +540,7 @@ async def _get_customer_service_channel_info(
     if not visitor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
 
-    visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language)
+    visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language, user_language)
     set_visitor_display_nickname(visitor_payload, user_language)
     return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type, user_language)
 
@@ -663,6 +666,6 @@ def _get_personal_visitor_channel_info(
     if not visitor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
 
-    visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language)
+    visitor_payload = _build_enriched_visitor_payload(visitor, db, project_id, accept_language, user_language)
     set_visitor_display_nickname(visitor_payload, user_language)
     return _build_visitor_channel_response(visitor, visitor_payload, channel_id, channel_type, user_language)

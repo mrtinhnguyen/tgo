@@ -62,6 +62,7 @@ from app.schemas import (
     VisitorActivityCreateResponse,
 )
 from app.schemas.visitor import set_visitor_display_nickname, set_visitor_list_display_nickname
+from app.schemas.tag import set_tag_list_display_name
 
 from app.schemas.wukongim import WuKongIMChannelMessageSyncResponse
 
@@ -1141,6 +1142,7 @@ async def get_visitor(
         if vt.deleted_at is None and vt.tag and vt.tag.deleted_at is None
     ]
     tag_responses = [TagResponse.model_validate(tag) for tag in active_tags]
+    set_tag_list_display_name(tag_responses, user_language)
 
     ai_profile_response = (
         VisitorAIProfileResponse.model_validate(visitor.ai_profile)

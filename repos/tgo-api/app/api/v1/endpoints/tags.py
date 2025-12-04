@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.logging import get_logger
-from app.core.security import get_current_active_user
+from app.core.security import get_current_active_user, get_user_language, UserLanguage
 from app.models import Staff, Tag, Visitor, VisitorTag
 from app.schemas import (
     TagCreate,
@@ -20,6 +20,7 @@ from app.schemas import (
     VisitorTagCreate,
     VisitorTagResponse,
 )
+from app.schemas.tag import set_tag_display_name, set_tag_list_display_name
 
 logger = get_logger("endpoints.tags")
 router = APIRouter()
@@ -30,6 +31,7 @@ async def list_tags(
     params: TagListParams = Depends(),
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> TagListResponse:
     """
     List tags.
@@ -57,8 +59,9 @@ async def list_tags(
     # Apply pagination and ordering (by weight desc, then name)
     tags = query.order_by(Tag.weight.desc(), Tag.name).offset(params.offset).limit(params.limit).all()
     
-    # Convert to response models
+    # Convert to response models and set display_name
     tag_responses = [TagResponse.model_validate(tag) for tag in tags]
+    set_tag_list_display_name(tag_responses, user_language)
     
     return TagListResponse(
         data=tag_responses,
@@ -77,6 +80,7 @@ async def create_tag(
     tag_data: TagCreate,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> TagResponse:
     """
     Create tag.
@@ -108,6 +112,7 @@ async def create_tag(
         weight=tag_data.weight,
         color=tag_data.color,
         description=tag_data.description,
+        name_zh=tag_data.name_zh,
     )
     
     db.add(tag)
@@ -116,7 +121,8 @@ async def create_tag(
     
     logger.info(f"Created tag {tag.id} with name: {tag.name}")
     
-    return TagResponse.model_validate(tag)
+    response = TagResponse.model_validate(tag)
+    return set_tag_display_name(response, user_language)
 
 
 @router.get("/{tag_id}", response_model=TagResponse)
@@ -124,6 +130,7 @@ async def get_tag(
     tag_id: str,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> TagResponse:
     """Get tag details."""
     logger.info(f"User {current_user.username} getting tag: {tag_id}")
@@ -140,7 +147,8 @@ async def get_tag(
             detail="Tag not found"
         )
     
-    return TagResponse.model_validate(tag)
+    response = TagResponse.model_validate(tag)
+    return set_tag_display_name(response, user_language)
 
 
 @router.patch("/{tag_id}", response_model=TagResponse)
@@ -149,11 +157,12 @@ async def update_tag(
     tag_data: TagUpdate,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
+    user_language: UserLanguage = Depends(get_user_language),
 ) -> TagResponse:
     """
     Update tag.
     
-    Update tag properties like weight, color, and description.
+    Update tag properties like weight, color, description, and name_zh.
     Name and category cannot be changed as they determine the tag ID.
     """
     logger.info(f"User {current_user.username} updating tag: {tag_id}")
@@ -182,7 +191,8 @@ async def update_tag(
     
     logger.info(f"Updated tag {tag.id}")
     
-    return TagResponse.model_validate(tag)
+    response = TagResponse.model_validate(tag)
+    return set_tag_display_name(response, user_language)
 
 
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
