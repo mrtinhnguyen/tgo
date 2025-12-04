@@ -493,6 +493,66 @@ has_domain_config() {
   return 1
 }
 
+# Validate and sanitize server host input
+# Returns sanitized host or empty string if invalid
+validate_server_host() {
+  local input="$1"
+  local sanitized="$input"
+  
+  # Remove leading/trailing whitespace
+  sanitized=$(echo "$sanitized" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  
+  # Check if input contains protocol prefix and remove it
+  if [[ "$sanitized" =~ ^https?:// ]]; then
+    echo "[WARN] Protocol prefix detected and will be removed" >&2
+    sanitized=$(echo "$sanitized" | sed -E 's|^https?://||')
+  fi
+  
+  # Remove trailing slash
+  sanitized=$(echo "$sanitized" | sed 's|/$||')
+  
+  # Remove port number if present (e.g., :8080)
+  if [[ "$sanitized" =~ :[0-9]+$ ]]; then
+    echo "[WARN] Port number detected and will be removed" >&2
+    sanitized=$(echo "$sanitized" | sed -E 's|:[0-9]+$||')
+  fi
+  
+  # Remove path if present (e.g., /api)
+  if [[ "$sanitized" =~ / ]]; then
+    echo "[WARN] Path detected and will be removed" >&2
+    sanitized=$(echo "$sanitized" | cut -d'/' -f1)
+  fi
+  
+  # Validate the result is a valid IP or domain
+  # IPv4 pattern
+  local ipv4_pattern='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+  # Domain pattern (simple validation)
+  local domain_pattern='^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$'
+  
+  if [[ "$sanitized" =~ $ipv4_pattern ]]; then
+    # Additional validation for IPv4 (each octet 0-255)
+    local valid=true
+    IFS='.' read -ra octets <<< "$sanitized"
+    for octet in "${octets[@]}"; do
+      if [ "$octet" -gt 255 ] 2>/dev/null; then
+        valid=false
+        break
+      fi
+    done
+    if [ "$valid" = true ]; then
+      echo "$sanitized"
+      return 0
+    fi
+  elif [[ "$sanitized" =~ $domain_pattern ]] || [ "$sanitized" = "localhost" ]; then
+    echo "$sanitized"
+    return 0
+  fi
+  
+  # Invalid input
+  echo ""
+  return 1
+}
+
 # Configure server host (IP or domain) and save to .env
 configure_server_host() {
   echo ""
@@ -530,6 +590,55 @@ configure_server_host() {
     return 0
   fi
 
+  # Check if SERVER_HOST is already configured in .env (for re-install scenarios)
+  local existing_server_host=""
+  if [ -f "$ENV_FILE" ]; then
+    existing_server_host=$(grep -E "^SERVER_HOST=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "")
+  fi
+
+  if [ -n "$existing_server_host" ] && [ "$existing_server_host" != "localhost" ]; then
+    echo "[INFO] Existing server host configuration detected: $existing_server_host"
+    echo ""
+    
+    # Ask user if they want to keep the existing configuration
+    local keep_config=""
+    if [ -t 0 ]; then
+      read -r -p "Keep existing configuration? [Y/n]: " keep_config
+    else
+      printf "Keep existing configuration? [Y/n]: "
+      read -r keep_config < /dev/tty
+    fi
+    
+    case "$keep_config" in
+      n|N|no|NO)
+        echo "[INFO] Will reconfigure server host..."
+        ;;
+      *)
+        echo "[INFO] Keeping existing server host: $existing_server_host"
+        
+        # Re-sync URLs with current port configuration
+        local nginx_port=""
+        nginx_port=$(grep -E "^NGINX_PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "80")
+        nginx_port="${nginx_port:-80}"
+        
+        local port_suffix=""
+        if [ "$nginx_port" != "80" ]; then
+          port_suffix=":${nginx_port}"
+        fi
+        
+        local protocol="http"
+        update_env_var "VITE_API_BASE_URL" "${protocol}://${existing_server_host}${port_suffix}/api"
+        update_env_var "VITE_WIDGET_PREVIEW_URL" "${protocol}://${existing_server_host}${port_suffix}/widget/"
+        update_env_var "VITE_WIDGET_SCRIPT_BASE" "${protocol}://${existing_server_host}${port_suffix}/widget/tgo-widget-sdk.js"
+        update_env_var "VITE_WIDGET_DEMO_URL" "${protocol}://${existing_server_host}${port_suffix}/widget/demo.html"
+        
+        echo "[INFO] URLs synchronized with port configuration (port: $nginx_port)"
+        echo ""
+        return 0
+        ;;
+    esac
+  fi
+
   local default_host="localhost"
   local detected_ip=""
 
@@ -557,39 +666,84 @@ configure_server_host() {
   echo "    - 192.168.1.100 (private IP)"
   echo "    - www.example.com (domain)"
   echo ""
+  echo "  Note: Do NOT include http://, https://, port, or path"
+  echo ""
 
-  # Read from /dev/tty to ensure we get input from terminal even when piped
-  local user_input=""
-  if [ -t 0 ]; then
-    # stdin is a terminal, read normally
-    read -r -p "Server host [$default_host]: " user_input
-  else
-    # stdin is not a terminal (piped), read from /dev/tty
-    printf "Server host [$default_host]: "
-    read -r user_input < /dev/tty
-  fi
-  
-  # Use default if empty
-  local server_host="${user_input:-$default_host}"
+  local server_host=""
+  local max_attempts=3
+  local attempt=0
+
+  while [ $attempt -lt $max_attempts ]; do
+    # Read from /dev/tty to ensure we get input from terminal even when piped
+    local user_input=""
+    if [ -t 0 ]; then
+      # stdin is a terminal, read normally
+      read -r -p "Server host [$default_host]: " user_input
+    else
+      # stdin is not a terminal (piped), read from /dev/tty
+      printf "Server host [$default_host]: "
+      read -r user_input < /dev/tty
+    fi
+    
+    # Use default if empty
+    local input_to_validate="${user_input:-$default_host}"
+    
+    # Validate and sanitize the input
+    server_host=$(validate_server_host "$input_to_validate")
+    
+    if [ -n "$server_host" ]; then
+      # Valid input
+      if [ "$server_host" != "$input_to_validate" ]; then
+        echo "[INFO] Sanitized input: $input_to_validate → $server_host"
+      fi
+      break
+    else
+      attempt=$((attempt + 1))
+      if [ $attempt -lt $max_attempts ]; then
+        echo "[ERROR] Invalid server host: $input_to_validate"
+        echo "[ERROR] Please enter a valid IP address or domain name (without http://, port, or path)"
+        echo ""
+      else
+        echo "[ERROR] Too many invalid attempts, using default: $default_host"
+        server_host="$default_host"
+      fi
+    fi
+  done
   
   # Determine protocol (http for IP, could be https for domain)
   local protocol="http"
   
-  # Build the base URL
-  local api_base_url="${protocol}://${server_host}/api"
-  local widget_base_url="${protocol}://${server_host}/widget"
+  # Read configured port from .env (may have been changed by check_and_configure_ports)
+  local nginx_port=""
+  if [ -f "$ENV_FILE" ]; then
+    nginx_port=$(grep -E "^NGINX_PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "")
+  fi
+  nginx_port="${nginx_port:-80}"
+  
+  # Build port suffix for URLs (only if non-standard port)
+  local port_suffix=""
+  if [ "$nginx_port" != "80" ]; then
+    port_suffix=":${nginx_port}"
+  fi
+  
+  # Build the base URL with port if needed
+  local api_base_url="${protocol}://${server_host}${port_suffix}/api"
+  local widget_base_url="${protocol}://${server_host}${port_suffix}/widget"
   
   echo ""
   echo "[INFO] Configured server host: $server_host"
+  if [ -n "$port_suffix" ]; then
+    echo "[INFO] Using non-standard port: $nginx_port"
+  fi
   echo "[INFO] API URL: $api_base_url"
   echo "[INFO] Widget URL: $widget_base_url"
   
   # Update .env file
   update_env_var "SERVER_HOST" "$server_host"
   update_env_var "VITE_API_BASE_URL" "$api_base_url"
-  update_env_var "VITE_WIDGET_PREVIEW_URL" "/widget/"
-  update_env_var "VITE_WIDGET_SCRIPT_BASE" "/widget/tgo-widget-sdk.js"
-  update_env_var "VITE_WIDGET_DEMO_URL" "/widget/demo.html"
+  update_env_var "VITE_WIDGET_PREVIEW_URL" "${protocol}://${server_host}${port_suffix}/widget/"
+  update_env_var "VITE_WIDGET_SCRIPT_BASE" "${protocol}://${server_host}${port_suffix}/widget/tgo-widget-sdk.js"
+  update_env_var "VITE_WIDGET_DEMO_URL" "${protocol}://${server_host}${port_suffix}/widget/demo.html"
   
   echo ""
   echo "[INFO] Configuration saved to .env"

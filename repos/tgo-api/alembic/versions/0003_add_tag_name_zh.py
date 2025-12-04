@@ -1,7 +1,7 @@
 """Add name_zh field to api_tags table.
 
 Revision ID: 0003_add_tag_name_zh
-Revises: 0002_add_visitor_nickname_zh
+Revises: api_0002_add_visitor_nickname_zh
 Create Date: 2024-12-04
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "0003_add_tag_name_zh"
-down_revision: Union[str, None] = "0002_add_visitor_nickname_zh"
+down_revision: Union[str, None] = "api_0002_add_visitor_nickname_zh"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
