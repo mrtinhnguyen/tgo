@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'tgo 文档',
+  title: 'Tgo 文档',
   tagline: '开源智能客服系统文档（多智能体 · 知识库 · MCP 工具 · 多渠道接入）',
   favicon: 'img/favicon.ico',
 
@@ -18,7 +18,7 @@ const config: Config = {
   // 例如：托管在 https://tgoai.github.io/tgo/ 时：
   // url: 'https://tgoai.github.io',
   // baseUrl: '/tgo/',
-  url: 'https://your-docusaurus-site.example.com',
+  url: 'https://docs.tgo.ai',
   baseUrl: '/',
 
   // GitHub Pages 部署相关配置（请按实际仓库替换）
@@ -43,7 +43,7 @@ const config: Config = {
           routeBasePath: '/', // 文档挂在站点根路径
           sidebarPath: './sidebars.ts',
           // 根据实际仓库调整，当前示例指向 tgo 主仓库
-          editUrl: 'https://github.com/tgoai/tgo/edit/main',
+          editUrl: 'https://github.com/tgoai/tgo/edit/main/docs-site/',
         },
         // 目前只用文档，不启用博客
         blog: false,
@@ -60,11 +60,12 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'tgo 文档',
+      title: 'tgo',
       logo: {
-        alt: 'tgo 文档',
+        alt: 'tgo Logo',
         src: 'img/logo.svg',
       },
+      hideOnScroll: true,
       items: [
         {
           type: 'docSidebar',
@@ -80,27 +81,8 @@ const config: Config = {
       ],
     },
     footer: {
-      style: 'dark',
-      links: [
-        {
-          title: '文档',
-          items: [
-            {
-              label: '概览',
-              to: '/',
-            },
-          ],
-        },
-        {
-          title: '社区与更多',
-          items: [
-            {
-              label: 'GitHub',
-              href: 'https://github.com/tgoai/tgo',
-            },
-          ],
-        },
-      ],
+      style: 'light',
+      links: [],
       copyright: `Copyright © ${new Date().getFullYear()} tgo.`,
     },
     prism: {
