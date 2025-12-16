@@ -55,6 +55,7 @@ export interface AIPersonaTag {
 
 export interface VisitorTag {
   id: string;
+  display_name?: string;
   name: string;
   color: string;
   weight: number; // 1-10, 10为最高权重
@@ -83,9 +84,9 @@ export const mockVisitor: ExtendedVisitor = {
   firstVisit: '2024/05/01 10:30',
   visitCount: 1,
   tags: [
-    { id: '1', name: '新用户', color: 'emerald', weight: 7 },
-    { id: '2', name: '来自官网', color: 'blue', weight: 5 },
-    { id: '3', name: '咨询售前', color: 'green', weight: 8 }
+    { id: '1', display_name: '新用户', color: 'emerald', weight: 7, name: '新用户' },
+    { id: '2', display_name: '来自官网', color: 'blue', weight: 5, name: '来自官网' },
+    { id: '3', display_name: '咨询售前', color: 'green', weight: 8, name: '咨询售前' }
   ],
   basicInfo: {
     name: '悟空',

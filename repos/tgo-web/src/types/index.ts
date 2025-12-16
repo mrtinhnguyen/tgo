@@ -556,7 +556,7 @@ export interface ChatTag {
 
 // Visitor tag object from API (subset preserved through ChannelVisitorExtra)
 export interface VisitorTag {
-  name: string;
+  display_name: string;
   category: string;
   weight: number;
   color: string;

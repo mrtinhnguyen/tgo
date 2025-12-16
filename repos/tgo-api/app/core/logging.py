@@ -2,6 +2,7 @@
 
 import logging
 import os
+import json
 
 from pythonjsonlogger import jsonlogger
 
@@ -26,8 +27,28 @@ class StartupFormatter(logging.Formatter):
         # For startup messages, use clean format without timestamp/logger name
         if hasattr(record, 'startup') and record.startup:
             return record.getMessage()
-        # For regular messages, use standard format
-        return super().format(record)
+        # For regular messages, use standard format + append extras (if any)
+        base = super().format(record)
+
+        # Collect non-standard LogRecord attributes injected via `extra=...`
+        standard_attrs = {
+            "name", "msg", "args", "levelname", "levelno", "pathname", "filename", "module",
+            "exc_info", "exc_text", "stack_info", "lineno", "funcName", "created", "msecs",
+            "relativeCreated", "thread", "threadName", "processName", "process",
+        }
+        extras = {
+            k: v
+            for k, v in record.__dict__.items()
+            if k not in standard_attrs and k != "startup"
+        }
+        if not extras:
+            return base
+
+        try:
+            extra_json = json.dumps(extras, ensure_ascii=False, default=str)
+        except Exception:
+            extra_json = str(extras)
+        return f"{base} | extra={extra_json}"
 
 
 def setup_logging() -> None:

@@ -116,8 +116,6 @@ export const useChannelDisplay = ({
   // Trigger fetch if needed
   useEffect(() => {
 
-    console.log('ensureChannel444-->', channelId, channelType, skipFetch, channelInfo, isLoading, hasError);
-
     if (skipFetch) return;
     if (!channelId || channelType == null) return;
     if (channelInfo || isLoading || hasError) return;

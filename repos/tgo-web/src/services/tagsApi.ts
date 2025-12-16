@@ -20,6 +20,8 @@ export type TagCategory = 'visitor' | 'knowledge';
 export interface TagResponse {
   /** Base64 encoded tag ID */
   id: string;
+  /** Tag display name (1-50 characters) */
+  display_name: string;
   /** Tag name (1-50 characters) */
   name: string;
   /** Tag category */

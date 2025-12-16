@@ -76,7 +76,8 @@ const toExtendedVisitorFromChannel = (extra: ChannelVisitorExtra): ExtendedVisit
   const tags = Array.isArray(extra.tags)
     ? extra.tags.map((t, idx) => ({
         id: t.id || `tag_${idx}`,
-        name: t.name || '',
+        name: t.display_name || '',
+        display_name: t.display_name || '',
         color: t.color || 'gray',
         weight: typeof t.weight === 'number' ? t.weight : 0
       }))
@@ -430,6 +431,7 @@ const VisitorPanel: React.FC<VisitorPanelProps> = ({ activeChat }) => {
     const res = await tagsApiService.listVisitorTags({ limit: 50 });
     return res.data.map(tag => ({
       id: tag.id,
+      display_name: tag.display_name,
       name: tag.name,
       color: tag.color || 'gray',
       weight: tag.weight

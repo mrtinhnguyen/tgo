@@ -44,6 +44,7 @@ export function visitorToChannelInfo(
       ai_insights: (visitor as any).ai_insights ?? null,
       tags: Array.isArray(visitor.tags)
         ? visitor.tags.map((t: any) => ({
+            display_name: t.display_name,
             name: t.name,
             category: t.category,
             weight: t.weight,
@@ -79,7 +80,7 @@ export function channelResponseToChannelInfo(resp: ChannelInfoApiResponse): Chan
         for (const t of tags) {
           if (t && typeof t === 'object') {
             result.push({
-              name: String(t.name ?? ''),
+              display_name: String(t.display_name ?? ''),
               category: String(t.category ?? 'visitor'),
               weight: Number.isFinite(t.weight) ? Number(t.weight) : 0,
               color: String(t.color ?? 'gray'),

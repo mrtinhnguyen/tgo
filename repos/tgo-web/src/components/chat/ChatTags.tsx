@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 
 export interface ChatTagsProps {
-  tags: { name: string; color?: string | null }[];
+  tags: { display_name: string; color?: string | null }[];
   isActive: boolean;
 }
 
@@ -39,7 +39,7 @@ export const ChatTags: React.FC<ChatTagsProps> = React.memo(({ tags, isActive })
         if (isActive) {
           return (
             <span key={index} className="inline-flex items-center rounded-md px-1 py-0.5 text-[10px] leading-none bg-white/20 text-white">
-              {tag.name}
+              {tag.display_name}
             </span>
           );
         }
@@ -47,7 +47,7 @@ export const ChatTags: React.FC<ChatTagsProps> = React.memo(({ tags, isActive })
         const style = { color: hex, backgroundColor: hexToRgba(hex, 0.12) } as React.CSSProperties;
         return (
           <span key={index} className="inline-flex items-center rounded-md px-1 py-0.5 text-[10px] leading-none" style={style}>
-            {tag.name}
+            {tag.display_name}
           </span>
         );
       })}

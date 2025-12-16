@@ -23,6 +23,8 @@ export interface ChatListItemProps {
 export const ChatListItem: React.FC<ChatListItemProps> = React.memo(({ chat, isActive, onClick }) => {
   const channelId = chat.channelId;
   const channelType = chat.channelType ?? DEFAULT_CHANNEL_TYPE;
+
+  console.log('chat-->', chat);
   
   // 判断是否是 agent 会话（channelId 以 -agent 结尾）或 team 会话（channelId 以 -team 结尾）
   const isAgentChat = channelId?.endsWith('-agent') ?? false;
@@ -98,6 +100,9 @@ export const ChatListItem: React.FC<ChatListItemProps> = React.memo(({ chat, isA
   }, [chat.unreadCount]);
   const unreadToDisplay = chat.unreadCount > 0 ? chat.unreadCount : prevUnreadRef.current;
 
+  const extraObj: any = extra;
+  let tags = extraObj?.tags || [];
+  console.log('tags-->', tags);
   return (
     <div
       className={`
@@ -146,7 +151,7 @@ export const ChatListItem: React.FC<ChatListItemProps> = React.memo(({ chat, isA
           )}
         </div>
 
-        <ChatTags tags={chat.tags || []} isActive={isActive} />
+        <ChatTags tags={tags} isActive={isActive} />
       </div>
     </div>
   );

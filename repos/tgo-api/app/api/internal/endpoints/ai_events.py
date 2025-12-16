@@ -23,9 +23,8 @@ from app.models import (
     Tag,
     VisitorTag,
     VisitorWaitingQueue,
-    QueueSource,
-    QueueUrgency,
     WaitingStatus,
+    AssignmentSource,
 )
 from app.schemas.ai import (
     AIServiceEvent,
@@ -35,6 +34,7 @@ from app.schemas.ai import (
     VisitorTagEvent,
 )
 from app.services.visitor_notifications import notify_visitor_profile_updated
+from app.services.transfer_service import transfer_to_staff
 from app.utils.intent import localize_intent
 from app.models.tag import TagCategory
 
@@ -109,8 +109,13 @@ def _ensure_manual_service_tag(db: Session, project_id, visitor: Visitor) -> Non
         visitor_tag.updated_at = datetime.utcnow()
 
 
-def _handle_manual_service_request(event: AIServiceEvent, project: Project, db: Session) -> dict:
-    """Persist a manual service request as a waiting queue entry."""
+async def _handle_manual_service_request(event: AIServiceEvent, project: Project, db: Session) -> dict:
+    """Handle a manual service request event.
+
+    1) Tag the visitor with the manual service escalation tag (转人工).
+    2) If the visitor is unassigned, call transfer_to_staff to assign a staff member.
+       Do NOT create VisitorWaitingQueue entries directly here.
+    """
     payload = ManualServiceRequestEvent.model_validate(event.payload or {})
 
     visitor = None
@@ -131,6 +136,10 @@ def _handle_manual_service_request(event: AIServiceEvent, project: Project, db: 
                 detail="Visitor does not belong to the specified project",
             )
         _ensure_manual_service_tag(db, project.id, visitor)
+        # IMPORTANT: Persist the manual service tag immediately.
+        # This handler may return early (e.g., visitor already queued/served),
+        # and without a commit the tag might not be saved.
+        db.commit()
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -167,94 +176,57 @@ def _handle_manual_service_request(event: AIServiceEvent, project: Project, db: 
                 "message": f"Visitor cannot enter queue (status: {visitor.service_status})",
             }
 
-    reason = payload.reason.strip()
+    reason = (payload.reason or "").strip()
     if not reason:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Manual service request reason cannot be empty",
         )
 
-    channel_id = None
-    channel_type = None
-    session_id_raw = (payload.session_id or "").strip()
-    if session_id_raw:
-        parts = session_id_raw.split("@")
-        if len(parts) != 2:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="session_id must follow {channel_id}@{channel_type} format",
-            )
-        channel_id = parts[0].strip() or None
-        channel_type_part = parts[1].strip()
-        if channel_type_part:
-            try:
-                channel_type = int(channel_type_part)
-            except Exception as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="channel_type must be an integer",
-                ) from exc
-
-    # Validate urgency and convert to priority
-    urgency = payload.urgency or QueueUrgency.NORMAL.value
-    if urgency not in [u.value for u in QueueUrgency]:
-        urgency = QueueUrgency.NORMAL.value
-    priority = VisitorWaitingQueue.urgency_to_priority(urgency)
-
-    # Calculate queue position
-    current_queue_count = db.query(VisitorWaitingQueue).filter(
-        VisitorWaitingQueue.project_id == project.id,
-        VisitorWaitingQueue.status == WaitingStatus.WAITING.value,
-    ).count()
-    position = current_queue_count + 1
-
-    # Create waiting queue entry
-    queue_entry = VisitorWaitingQueue(
-        project_id=project.id,
+    transfer_result = await transfer_to_staff(
+        db=db,
         visitor_id=visitor.id,
-        source=QueueSource.AI_REQUEST.value,
-        urgency=urgency,
-        priority=priority,
-        position=position,
-        status=WaitingStatus.WAITING.value,
+        project_id=project.id,
+        source=AssignmentSource.RULE,
         visitor_message=reason,
-        reason="AI requested manual service",
-        channel_id=channel_id,
-        channel_type=channel_type,
-        extra_metadata=payload.metadata or {},
-    )
-    db.add(queue_entry)
-    
-    # Update visitor status to QUEUED
-    visitor.set_status_queued()
-    
-    db.commit()
-    db.refresh(queue_entry)
-
-    logger.info(
-        "Manual service request added to waiting queue from AI event",
-        extra={
-            "project_id": str(project.id),
-            "visitor_id": str(visitor.id),
-            "entry_id": str(queue_entry.id),
-            "urgency": urgency,
-            "priority": priority,
-            "position": position,
-        },
+        add_to_queue_if_no_staff=True,
+        # manual_service.request implies AI should be disabled
+        ai_disabled=True,
     )
 
-    # Trigger immediate processing (fire-and-forget)
-    import asyncio
-    from app.tasks.process_waiting_queue import trigger_process_entry
-    asyncio.create_task(trigger_process_entry(queue_entry.id))
+    if not transfer_result.success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to transfer visitor to staff: {transfer_result.message}",
+        )
+
+    if transfer_result.assigned_staff_id:
+        return {
+            "assigned_staff_id": str(transfer_result.assigned_staff_id),
+            "session_id": str(transfer_result.session.id) if transfer_result.session else None,
+            "message": transfer_result.message,
+        }
+
+    if transfer_result.waiting_queue:
+        q = transfer_result.waiting_queue
+        return {
+            "entry_id": str(q.id),
+            "status": q.status,
+            "position": q.position,
+            "priority": q.priority,
+            "channel_id": q.channel_id,
+            "channel_type": q.channel_type,
+            "message": transfer_result.message,
+        }
 
     return {
-        "entry_id": str(queue_entry.id),
-        "status": queue_entry.status,
-        "position": queue_entry.position,
-        "priority": queue_entry.priority,
-        "channel_id": queue_entry.channel_id,
-        "channel_type": queue_entry.channel_type,
+        "entry_id": None,
+        "status": visitor.service_status,
+        "position": None,
+        "priority": None,
+        "channel_id": None,
+        "channel_type": None,
+        "message": transfer_result.message,
     }
 
 
@@ -796,7 +768,7 @@ async def ingest_ai_event_internal(
 
     # Reuse existing event handlers
     if event_type == MANUAL_SERVICE_EVENT:
-        result = _handle_manual_service_request(event, project, db)
+        result = await _handle_manual_service_request(event, project, db)
         return {"event_type": event_type, "result": result}
 
     if event_type == VISITOR_INFO_EVENT:

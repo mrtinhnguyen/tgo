@@ -6,6 +6,7 @@ import type { VisitorTag } from '@/data/mockVisitor';
 
 interface SuggestedTag {
   id: string;
+  display_name: string;
   name: string;
   color: string;
   weight: number;
@@ -471,7 +472,7 @@ const TagManager: React.FC<TagManagerProps> = ({
                   borderColor: presetColorConfig.hex + '40'
                 }}
               >
-                {preset.name}
+                {preset.display_name}
                 {preset.weight >= 8 && (
                   <span className="ml-1 text-[8px] opacity-70">★</span>
                 )}

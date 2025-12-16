@@ -25,6 +25,7 @@ from app.schemas.wukongim import (
     WuKongIMSetUnreadRequest,
 )
 from app.schemas.visitor import VisitorResponse, resolve_visitor_display_name, set_visitor_display_nickname
+from app.api.v1.endpoints.channels import _build_enriched_visitor_payload
 from app.services.wukongim_client import wukongim_client
 from app.utils.encoding import build_visitor_channel_id, parse_visitor_channel_id
 from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE
@@ -38,6 +39,7 @@ async def _build_channels_for_conversations(
     conversations: List[WuKongIMConversation],
     project_id: UUID,
     user_language: UserLanguage = "en",
+    accept_language: Optional[str] = None,
 ) -> List[ChannelInfo]:
     """
     Build channel information list for conversations with batch query optimization.
@@ -134,8 +136,14 @@ async def _build_channels_for_conversations(
         if not visitor:
             continue
         
-        # Build visitor response with enriched data
-        visitor_payload = VisitorResponse.model_validate(visitor)
+        # Build visitor response with enriched data (keep consistent with get_channel_info)
+        visitor_payload = _build_enriched_visitor_payload(
+            visitor=visitor,
+            db=db,
+            project_id=project_id,
+            accept_language=accept_language,
+            user_language=user_language,
+        )
         
         # Set display_nickname based on user language
         set_visitor_display_nickname(visitor_payload, user_language)
@@ -185,6 +193,7 @@ class WuKongIMConversationPaginatedResponse(BaseModel):
     description="同步当前客服在 WuKongIM 中的所有会话列表（包含历史会话），包含最近消息和频道信息。",
 )
 async def sync_my_conversations(
+    http_request: Request,
     request: WuKongIMConversationSyncRequest,
     db: Session = Depends(get_db),
     current_user: Staff = Depends(get_current_active_user),
@@ -223,6 +232,7 @@ async def sync_my_conversations(
             conversations=conversations,
             project_id=current_user.project_id,
             user_language=user_language,
+            accept_language=http_request.headers.get("Accept-Language"),
         )
         
         # Only filter visitor (customer service) conversations by valid channels.

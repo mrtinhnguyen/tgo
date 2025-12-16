@@ -477,7 +477,7 @@ async def _create_visitor_with_channel(
     if use_visitor_id_as_open_id:
         # Flush to get visitor ID, then update platform_open_id
         db.flush()
-        visitor.platform_open_id = str(visitor.id)
+        visitor.platform_open_id = str(visitor.id) + "-vtr"
     
     db.commit()
     db.refresh(visitor)
