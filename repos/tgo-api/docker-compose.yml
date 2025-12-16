@@ -39,59 +39,6 @@ services:
     networks:
       - tgo-network
 
-
-  # Kafka (KRaft, single-node) - apache/kafka:latest
-  kafka:
-    image: apache/kafka:latest
-    container_name: tgo-api-kafka
-    ports:
-      - "9092:9092"  # INTERNAL for containers
-      - "9094:9094"  # EXTERNAL for host clients
-    environment:
-      - KAFKA_NODE_ID=1
-      - KAFKA_PROCESS_ROLES=broker,controller
-      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-      - KAFKA_LISTENERS=INTERNAL://:9092,EXTERNAL://:9094,CONTROLLER://:9093
-      - KAFKA_ADVERTISED_LISTENERS=INTERNAL://kafka:9092,EXTERNAL://localhost:9094
-      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
-      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
-      - KAFKA_LOG_DIRS=/var/lib/kafka/data
-      - KAFKA_NUM_PARTITIONS=1
-      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
-      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-      # Message retention: 7 days
-      - KAFKA_LOG_RETENTION_HOURS=168
-      # Check interval: 2 hours
-      - KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS=7200000
-      - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
-    volumes:
-      - kafka_data:/var/lib/kafka/data
-    healthcheck:
-      test: ["CMD", "bash", "-c", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - tgo-network
-
-  # Kafka UI
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: tgo-api-kafka-ui
-    ports:
-      - "8088:8080"
-    environment:
-      - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
-    depends_on:
-      kafka:
-        condition: service_started
-    networks:
-      - tgo-network
-
   # TGO API Service (Main + Internal)
   tgo-api:
     build: .
@@ -102,7 +49,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/tgo_api
       - SECRET_KEY=your-secret-key-here-change-in-production-min-32-chars
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - REDIS_URL=redis://redis:6379/0
       - INTERNAL_SERVICE_HOST=0.0.0.0
       - INTERNAL_SERVICE_PORT=8001
@@ -115,8 +61,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_started
     networks:
       - tgo-network
     volumes:
@@ -141,8 +85,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  kafka_data:
     driver: local
   pgadmin_data:
     driver: local

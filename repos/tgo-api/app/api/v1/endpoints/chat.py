@@ -45,13 +45,10 @@ from app.schemas.chat import (
     OpenAIChatCompletionUsage,
     OpenAIChatMessage,
 )
-from app.schemas.messages import IncomingMessagePayload
-from app.services import platform_stream_bus
 from app.services.chat_service import get_or_create_visitor
 from app.services.transfer_service import transfer_to_staff
 from app.models import AssignmentSource
 from app.services.ai_client import AIServiceClient
-from app.services.kafka_producer import publish_incoming_message
 from app.services.wukongim_client import wukongim_client
 from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE, MEMBER_TYPE_STAFF
 from app.utils.encoding import build_visitor_channel_id, parse_visitor_channel_id
@@ -299,7 +296,7 @@ async def _process_ai_stream_to_wukongim(
     ai_client: AIServiceClient,
     message: str,
     project_id: str,
-    team_id: str,
+    team_id: Optional[str],
     session_id: str,
     user_id: str,
     channel_id: str,
@@ -308,10 +305,11 @@ async def _process_ai_stream_to_wukongim(
     from_uid: str,
     system_message: Optional[str] = None,
     expected_output: Optional[str] = None,
+    agent_id: Optional[str] = None,
 ) -> None:
     """Process AI stream and forward all events to WuKongIM (no client response).
     
-    Used for wukongim_only mode.
+    Used for wukongim_only mode and staff_team_chat.
     """
     import logging
     logger = logging.getLogger("chat")
@@ -321,6 +319,7 @@ async def _process_ai_stream_to_wukongim(
             message=message,
             project_id=project_id,
             team_id=team_id,
+            agent_id=agent_id,
             session_id=session_id,
             user_id=user_id,
             enable_memory=True,
@@ -1584,7 +1583,7 @@ async def chat_completion_openai_compatible(
     - If `agent_id` is provided: channel_id = `{agent_id}-agent`
 
     **Response Delivery**: AI response is sent via WuKongIM, not returned in this endpoint.
-    This endpoint only returns success/failure status after publishing to Kafka.
+    This endpoint returns success/failure status after initiating AI processing.
     """,
 )
 async def staff_team_chat(
@@ -1595,7 +1594,7 @@ async def staff_team_chat(
     """Staff chat with AI team or agent. Requires chat:send permission.
 
     - Auth: JWT token (staff authentication)
-    - Behavior: Publishes message to Kafka
+    - Behavior: Directly calls AI service and forwards response to WuKongIM
     - Output: Success/failure status (AI response delivered via WuKongIM)
     """
     # 1) Get project info
@@ -1613,7 +1612,7 @@ async def staff_team_chat(
         target_agent_id = None
     else:
         channel_id = f"{req.agent_id}-agent"
-        target_team_id = project.default_team_id
+        target_team_id = str(project.default_team_id) if project.default_team_id else None
         target_agent_id = str(req.agent_id)
 
     channel_type = 1  # Personal channel type
@@ -1625,40 +1624,28 @@ async def staff_team_chat(
     # 4) Build from_uid for staff
     from_uid = f"{current_user.id}-staff"
 
-    # 5) Build payload
-    payload = IncomingMessagePayload(
-        from_uid=from_uid,
+    # 5) Directly call AI service and forward to WuKongIM in background
+    ai_client = AIServiceClient()
+    
+    asyncio.create_task(_process_ai_stream_to_wukongim(
+        ai_client=ai_client,
+        message=req.message,
+        project_id=str(current_user.project_id),
+        team_id=target_team_id,
+        session_id=session_id,
+        user_id=from_uid,
         channel_id=channel_id,
         channel_type=channel_type,
-        platform_type="internal",
-        message_text=req.message,
-        project_id=str(current_user.project_id),
-        project_api_key=project.api_key,
         client_msg_no=client_msg_no,
-        session_id=session_id,
-        received_at=int(time.time() * 1000),
-        source="staff_team_chat",
-        extra={},
-        staff_id=str(current_user.id),
-        staff_cid=from_uid,
-        team_id=target_team_id,
-        agent_id=target_agent_id,
+        from_uid=from_uid,
         system_message=req.system_message,
         expected_output=req.expected_output,
-        ai_disabled=False,
-    )
+        agent_id=target_agent_id,
+    ))
 
-    # 6) Publish message to Kafka (AI response delivered via WuKongIM)
-    ok = await publish_incoming_message(payload)
-    if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to publish message"
-        )
-
-    # 7) Return success response
+    # 6) Return success response immediately
     return StaffTeamChatResponse(
         success=True,
-        message="Message published successfully",
+        message="Request accepted, processing in background",
         client_msg_no=client_msg_no,
     )

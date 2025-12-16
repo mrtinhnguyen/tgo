@@ -167,6 +167,14 @@ const KnowledgeBaseDetail: React.FC = () => {
     setIsUploadVisible(!isUploadVisible);
   };
 
+  const handleRemoveUploadProgress = (fileId: string) => {
+    try {
+      fileServiceRef.current?.clearUploadProgress(fileId);
+    } catch (e) {
+      console.error('Failed to clear upload progress:', e);
+    }
+  };
+
   // Handle file upload
   const handleFileUpload = async (files: File[]) => {
     if (!fileServiceRef.current) {
@@ -176,17 +184,31 @@ const KnowledgeBaseDetail: React.FC = () => {
     }
 
     try {
-      await fileServiceRef.current.uploadFiles(files, {
+      const result = await fileServiceRef.current.uploadFiles(files, {
         description: 'Uploaded via web interface',
         tags: ['web-upload'],
       });
 
-      // Show success for multiple files
-      if (files.length === 1) {
-        showFileSuccess(showToast, 'upload', files[0].name);
-      } else {
-        showToast('success', t('knowledge.upload.uploadComplete', '上传完成'), t('knowledge.upload.multipleSuccessMessage', { count: files.length, defaultValue: `${files.length} 个文件上传成功` }));
+      // Show appropriate message based on results
+      if (result.failedCount === 0) {
+        // All files uploaded successfully
+        if (files.length === 1) {
+          showFileSuccess(showToast, 'upload', files[0].name);
+        } else {
+          showToast('success', t('knowledge.upload.uploadComplete', '上传完成'), t('knowledge.upload.multipleSuccessMessage', { count: files.length, defaultValue: `${files.length} 个文件上传成功` }));
+        }
+      } else if (result.successCount > 0) {
+        // Partial success
+        showToast('warning', 
+          t('knowledge.upload.partialSuccess', '部分上传成功'), 
+          t('knowledge.upload.partialSuccessMessage', { 
+            success: result.successCount, 
+            failed: result.failedCount, 
+            defaultValue: `${result.successCount} 个文件上传成功，${result.failedCount} 个文件上传失败` 
+          })
+        );
       }
+      // Note: If all files failed, an error will be thrown and caught below
     } catch (error) {
       console.error('File upload failed:', error);
       if (files.length === 1) {
@@ -392,6 +414,7 @@ const KnowledgeBaseDetail: React.FC = () => {
               isVisible={isUploadVisible}
               onToggle={handleToggleUpload}
               uploadProgress={uploadProgress}
+              onRemoveUploadProgress={handleRemoveUploadProgress}
               hasEmbeddingModel={hasEmbeddingModel}
               isCheckingEmbedding={isCheckingEmbedding}
             />

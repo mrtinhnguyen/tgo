@@ -16,13 +16,13 @@ endif
 
 .PHONY: help build build-all \
 	build-api build-ai build-rag build-rag-worker build-rag-beat build-rag-flower \
-	build-web build-widget build-platform build-kafka-ui
+	build-web build-widget build-platform
 
 help:
 	@echo "Targets:"
 	@echo "  build SERVICE=<name>   Build+restart a single service (docker compose up -d --build <name>)"
 	@echo "  build-all              Build+restart all services"
-	@echo "  build-<svc>           Convenience shorthands (api, ai, rag, rag-worker, rag-beat, rag-flower, web, widget, platform, kafka-ui)"
+	@echo "  build-<svc>           Convenience shorthands (api, ai, rag, rag-worker, rag-beat, rag-flower, web, widget, platform)"
 
 # Build a single service by name; always play a sound; propagate original exit status
 build:
@@ -71,7 +71,4 @@ build-widget:
 
 build-platform:
 	@$(MAKE) build SERVICE=tgo-platform
-
-build-kafka-ui:
-	@$(MAKE) build SERVICE=kafka-ui
 

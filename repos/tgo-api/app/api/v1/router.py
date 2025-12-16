@@ -8,7 +8,6 @@ from app.api.v1.endpoints import (
     ai_teams,
     ai_tools,
     conversations,
-    diagnostics,
     docs,
     email,
     onboarding,
@@ -170,13 +169,6 @@ api_router.include_router(
 
 api_router.include_router(
     wukongim_webhook.router
-)
-
-# Diagnostic endpoints (for debugging)
-api_router.include_router(
-    diagnostics.router,
-    prefix="/diagnostics",
-    tags=["Diagnostics"]
 )
 
 # Email endpoints

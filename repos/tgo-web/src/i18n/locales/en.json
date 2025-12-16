@@ -1140,6 +1140,8 @@
       "maxFileSize": "File size cannot exceed 10MB",
       "unsupportedFormat": "Unsupported file format",
       "multipleSuccessMessage": "{{count}} files uploaded successfully",
+      "partialSuccess": "Partial Upload Success",
+      "partialSuccessMessage": "{{success}} files uploaded successfully, {{failed}} files failed",
       "checkingEmbedding": "Checking embedding model configuration...",
       "noEmbeddingModel": {
         "title": "⚠️ Cannot Upload Files",
@@ -2356,7 +2358,7 @@
       "infoText": "When the AI agent cannot resolve user issues, the system will automatically assign the conversation to a human agent. Human agents can take over the conversation and provide more professional assistance.",
       "staffItem": "Agent {{index}}",
       "username": "Username",
-      "usernamePlaceholder": "Enter username",
+      "usernamePlaceholder": "Enter username (min 4, letters/numbers only)",
       "name": "Name",
       "namePlaceholder": "Enter agent name",
       "password": "Password",
@@ -2368,7 +2370,8 @@
       "requiredHint": "* At least one human agent is required",
       "validation": {
         "usernameRequired": "Username is required",
-        "usernameLength": "Username must be 1-50 characters",
+        "usernameLength": "Username must be 4-50 characters",
+        "usernameFormat": "Username can only contain English letters and numbers (no spaces/special characters)",
         "nameRequired": "Name is required",
         "passwordRequired": "Password is required",
         "passwordLength": "Password must be at least 8 characters",

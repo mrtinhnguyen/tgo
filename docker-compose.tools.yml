@@ -1,16 +1,4 @@
 services:
-  # Kafka UI (management console)
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: tgo-api-kafka-ui
-    environment:
-      - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
-    ports:
-      - "8088:8080"
-    networks:
-      - tgo-suite_default
-
   # Adminer (database management UI)
   adminer:
     image: adminer:latest
@@ -40,7 +28,7 @@ volumes:
 
 networks:
   # Reuse the default network from the main compose project so tools
-  # can reach core services by name (postgres, kafka, etc.)
+  # can reach core services by name (postgres, redis, etc.)
   tgo-suite_default:
     external: true
 

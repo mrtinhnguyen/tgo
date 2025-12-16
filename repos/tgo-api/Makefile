@@ -12,7 +12,7 @@ dev: ## Start development environment (one-click startup)
 	@echo "🚀 Starting TGO-Tech API development environment..."
 	@cp -n .env.example .env 2>/dev/null || true
 	@echo "📋 Environment file ready (.env)"
-	@docker-compose up -d postgres redis kafka kafka-ui adminer
+	@docker-compose up -d postgres redis adminer
 	@echo "⏳ Waiting for database to be ready..."
 	@sleep 10
 	@$(MAKE) migrate

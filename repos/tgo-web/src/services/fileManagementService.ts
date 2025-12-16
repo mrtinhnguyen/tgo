@@ -187,13 +187,6 @@ export class FileManagementService {
       });
       this.setState({ uploadProgress: new Map(uploadProgress) });
 
-      // Clear error progress after 5 seconds
-      setTimeout(() => {
-        const updatedProgress = new Map(this.state.uploadProgress);
-        updatedProgress.delete(fileId);
-        this.setState({ uploadProgress: updatedProgress });
-      }, 5000);
-
       throw error;
     }
   }
@@ -206,14 +199,40 @@ export class FileManagementService {
       tags?: string[];
       language?: string;
     }
-  ): Promise<void> {
+  ): Promise<{ successCount: number; failedCount: number; errors: Error[] }> {
     const uploadPromises = files.map(file => this.uploadFile(file, metadata));
     
-    try {
-      await Promise.allSettled(uploadPromises);
-    } catch (error) {
-      console.error('Some files failed to upload:', error);
-      // Individual file errors are already handled in uploadFile
+    const results = await Promise.allSettled(uploadPromises);
+    
+    const errors: Error[] = [];
+    let successCount = 0;
+    let failedCount = 0;
+    
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        successCount++;
+      } else {
+        failedCount++;
+        errors.push(result.reason instanceof Error ? result.reason : new Error(String(result.reason)));
+      }
+    });
+    
+    // If all files failed, throw the first error
+    if (failedCount > 0 && successCount === 0) {
+      throw errors[0];
+    }
+    
+    return { successCount, failedCount, errors };
+  }
+
+  /**
+   * Clear a specific upload progress entry (e.g., user closes the item in UI)
+   */
+  clearUploadProgress(fileId: string): void {
+    const uploadProgress = new Map(this.state.uploadProgress);
+    if (uploadProgress.has(fileId)) {
+      uploadProgress.delete(fileId);
+      this.setState({ uploadProgress });
     }
   }
 

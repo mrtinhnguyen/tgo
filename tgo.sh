@@ -65,8 +65,8 @@ run_all_migrations() {
 start_infrastructure() {
   local compose_file_args="$1"
   
-  echo "[INFO] Starting core infrastructure (postgres, redis, kafka, wukongim)..."
-  docker compose --env-file "$ENV_FILE" $compose_file_args up -d postgres redis kafka wukongim
+  echo "[INFO] Starting core infrastructure (postgres, redis, wukongim)..."
+  docker compose --env-file "$ENV_FILE" $compose_file_args up -d postgres redis wukongim
 }
 
 # Log deployment mode
@@ -306,7 +306,7 @@ Commands:
   doctor                              Check health status of all services
   service <start|stop|remove> [--source] [--cn]
                                       Start/stop/remove core services
-  tools <start|stop>                  Start/stop debug tools (kafka-ui, adminer)
+  tools <start|stop>                  Start/stop debug tools (adminer, redis-insight)
   build <service>                     Rebuild specific service from source (api|rag|ai|platform|web|widget|all)
   config <subcommand> [args]          Configure domains and SSL certificates
 
@@ -1050,7 +1050,6 @@ cmd_install() {
     "./data/postgres"
     "./data/redis"
     "./data/wukongim"
-    "./data/kafka/data"
     "./data/tgo-rag/uploads"
     "./data/tgo-api/uploads"
     "./data/nginx"
@@ -1353,11 +1352,11 @@ cmd_tools() {
   fi
   case "$sub" in
     start)
-      echo "[INFO] Starting debug tools (kafka-ui, adminer)..."
+      echo "[INFO] Starting debug tools (adminer, redis-insight)..."
       docker compose -f "$TOOLS_COMPOSE" up -d
       ;;
     stop)
-      echo "[INFO] Stopping debug tools (kafka-ui, adminer)..."
+      echo "[INFO] Stopping debug tools (adminer, redis-insight)..."
       docker compose -f "$TOOLS_COMPOSE" down
       ;;
     *)
@@ -1846,7 +1845,6 @@ cmd_doctor() {
     "tgo-postgres:PostgreSQL"
     "tgo-redis:Redis"
     "tgo-wukongim:WuKongIM"
-    "tgo-api-kafka:Kafka"
     "tgo-rag:RAG Service"
     "tgo-rag-worker:RAG Worker"
     "tgo-rag-beat:RAG Beat"

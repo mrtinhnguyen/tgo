@@ -99,16 +99,6 @@ RAG 服务配置：
 | `VITE_API_BASE_URL` | API 地址 |
 | `VITE_WS_URL` | WebSocket 地址 |
 
-## Kafka 配置
-
-消息队列相关配置（在 `tgo-api.env` 中）：
-
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka 服务器地址 | `kafka:9092` |
-| `KAFKA_TOPIC_INCOMING_MESSAGES` | 消息接收主题 | `tgo.messages.incoming` |
-| `KAFKA_TOPIC_AI_RESPONSES` | AI 响应主题 | `tgo.ai.responses` |
-
 ## WuKongIM 配置
 
 即时通讯服务配置（在 `tgo-api.env` 中）：

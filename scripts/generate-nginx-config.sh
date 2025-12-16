@@ -8,6 +8,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONFIG_FILE="$PROJECT_ROOT/data/.tgo-domain-config"
 NGINX_CONF_DIR="$PROJECT_ROOT/data/nginx/conf.d"
+ENV_FILE="$PROJECT_ROOT/.env"
+
+# Read env var from .env without executing it (safe for simple KEY=VALUE files)
+read_env_var() {
+    local key="$1"
+    local file="$2"
+    if [ ! -f "$file" ]; then
+        echo ""
+        return 0
+    fi
+    # Take the last match to allow overrides later in the file
+    local line
+    line=$(grep -E "^${key}=" "$file" | tail -n 1 || true)
+    if [ -z "$line" ]; then
+        echo ""
+        return 0
+    fi
+    # Strip KEY= and optional surrounding quotes
+    local value="${line#*=}"
+    value="${value%$'\r'}"
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    echo "$value"
+}
 
 # Load domain configuration
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -31,6 +57,34 @@ WEB_DOMAIN=${WEB_DOMAIN:-localhost}
 WIDGET_DOMAIN=${WIDGET_DOMAIN:-localhost}
 API_DOMAIN=${API_DOMAIN:-localhost}
 WS_DOMAIN=${WS_DOMAIN:-localhost}
+
+# -----------------------------------------------------------------------------
+# Upload / Proxy settings (for /api -> tgo-api)
+# Configure via root .env:
+#   - NGINX_CLIENT_MAX_BODY_SIZE=50m   (preferred, nginx syntax)
+#   - or NGINX_MAX_UPLOAD_SIZE_MB=50   (will be converted to 50m)
+# Optional timeouts:
+#   - NGINX_PROXY_READ_TIMEOUT=300s
+#   - NGINX_PROXY_SEND_TIMEOUT=300s
+#   - NGINX_PROXY_CONNECT_TIMEOUT=30s
+# -----------------------------------------------------------------------------
+NGINX_CLIENT_MAX_BODY_SIZE=$(read_env_var "NGINX_CLIENT_MAX_BODY_SIZE" "$ENV_FILE")
+NGINX_MAX_UPLOAD_SIZE_MB=$(read_env_var "NGINX_MAX_UPLOAD_SIZE_MB" "$ENV_FILE")
+NGINX_PROXY_READ_TIMEOUT=$(read_env_var "NGINX_PROXY_READ_TIMEOUT" "$ENV_FILE")
+NGINX_PROXY_SEND_TIMEOUT=$(read_env_var "NGINX_PROXY_SEND_TIMEOUT" "$ENV_FILE")
+NGINX_PROXY_CONNECT_TIMEOUT=$(read_env_var "NGINX_PROXY_CONNECT_TIMEOUT" "$ENV_FILE")
+
+if [ -z "$NGINX_CLIENT_MAX_BODY_SIZE" ]; then
+    if [[ "$NGINX_MAX_UPLOAD_SIZE_MB" =~ ^[0-9]+$ ]]; then
+        NGINX_CLIENT_MAX_BODY_SIZE="${NGINX_MAX_UPLOAD_SIZE_MB}m"
+    else
+        # Sensible default aligned with API default (20MB)
+        NGINX_CLIENT_MAX_BODY_SIZE="20m"
+    fi
+fi
+NGINX_PROXY_READ_TIMEOUT=${NGINX_PROXY_READ_TIMEOUT:-300s}
+NGINX_PROXY_SEND_TIMEOUT=${NGINX_PROXY_SEND_TIMEOUT:-300s}
+NGINX_PROXY_CONNECT_TIMEOUT=${NGINX_PROXY_CONNECT_TIMEOUT:-30s}
 
 # Generate nginx configuration
 cat > "$NGINX_CONF_DIR/default.conf" << 'NGINX_CONFIG'
@@ -78,6 +132,12 @@ else
     location ~ ^/api(/|$) {
         rewrite ^/api(/.*)$ $1 break;
         proxy_pass http://tgo-api:8000;
+        # Upload settings (configured via .env)
+        client_max_body_size CLIENT_MAX_BODY_SIZE;
+        proxy_request_buffering off;
+        proxy_read_timeout NGINX_PROXY_READ_TIMEOUT;
+        proxy_send_timeout NGINX_PROXY_SEND_TIMEOUT;
+        proxy_connect_timeout NGINX_PROXY_CONNECT_TIMEOUT;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -215,6 +275,12 @@ server {
 
     location / {
         proxy_pass http://tgo-api:8000;
+        # Upload settings (configured via .env)
+        client_max_body_size CLIENT_MAX_BODY_SIZE;
+        proxy_request_buffering off;
+        proxy_read_timeout NGINX_PROXY_READ_TIMEOUT;
+        proxy_send_timeout NGINX_PROXY_SEND_TIMEOUT;
+        proxy_connect_timeout NGINX_PROXY_CONNECT_TIMEOUT;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -274,6 +340,12 @@ server {
     location ~ ^/api(/|$) {
         rewrite ^/api(/.*)$ $1 break;
         proxy_pass http://tgo-api:8000;
+        # Upload settings (configured via .env)
+        client_max_body_size CLIENT_MAX_BODY_SIZE;
+        proxy_request_buffering off;
+        proxy_read_timeout NGINX_PROXY_READ_TIMEOUT;
+        proxy_send_timeout NGINX_PROXY_SEND_TIMEOUT;
+        proxy_connect_timeout NGINX_PROXY_CONNECT_TIMEOUT;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -313,7 +385,11 @@ TEMP_CONF=$(mktemp)
 cat "$NGINX_CONF_DIR/default.conf" | sed "s/WEB_DOMAIN/$WEB_DOMAIN/g" | \
   sed "s/WIDGET_DOMAIN/$WIDGET_DOMAIN/g" | \
   sed "s/API_DOMAIN/$API_DOMAIN/g" | \
-  sed "s/WS_DOMAIN/$WS_DOMAIN/g" > "$TEMP_CONF"
+  sed "s/WS_DOMAIN/$WS_DOMAIN/g" | \
+  sed "s/CLIENT_MAX_BODY_SIZE/$NGINX_CLIENT_MAX_BODY_SIZE/g" | \
+  sed "s/NGINX_PROXY_READ_TIMEOUT/$NGINX_PROXY_READ_TIMEOUT/g" | \
+  sed "s/NGINX_PROXY_SEND_TIMEOUT/$NGINX_PROXY_SEND_TIMEOUT/g" | \
+  sed "s/NGINX_PROXY_CONNECT_TIMEOUT/$NGINX_PROXY_CONNECT_TIMEOUT/g" > "$TEMP_CONF"
 mv "$TEMP_CONF" "$NGINX_CONF_DIR/default.conf"
 
 echo "[INFO] Nginx configuration generated: $NGINX_CONF_DIR/default.conf"

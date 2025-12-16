@@ -182,24 +182,6 @@ async def startup_event():
         # best-effort; don't block startup
         pass
 
-    # Require Kafka configuration; fail fast if missing
-    if not (settings.KAFKA_BOOTSTRAP_SERVERS and settings.KAFKA_BOOTSTRAP_SERVERS.strip()):
-        raise RuntimeError("Kafka not configured: set KAFKA_BOOTSTRAP_SERVERS")
-
-    # Start Kafka producer/consumers (best-effort)
-    try:
-        from app.services.kafka_producer import start_producer
-        from app.services.kafka_consumers.ai_processor import start_ai_processor
-        from app.services.kafka_consumers.wukong_forwarder import start_wukong_forwarder
-        from app.services.kafka_consumers.platform_forwarder import start_platform_forwarder
-        await start_producer()
-        await start_ai_processor()
-        await start_wukong_forwarder()
-        await start_platform_forwarder()
-    except Exception as e:
-        # best-effort; don't block startup
-        print(f"Failed to start Kafka consumers: {e}")
-
     # Server ready
     startup_log("🌐 Server starting...")
     startup_log(f"   📍 Listening on: http://0.0.0.0:8000")
@@ -212,7 +194,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Application shutdown event: stop background tasks and Kafka consumers."""
+    """Application shutdown event: stop background tasks."""
     # Stop periodic AIProvider sync task (best-effort)
     try:
         from app.tasks.sync_ai_providers import stop_ai_provider_sync_task
@@ -238,19 +220,6 @@ async def shutdown_event():
     try:
         from app.tasks.close_timeout_sessions import stop_session_timeout_task
         await stop_session_timeout_task()
-    except Exception:
-        pass
-
-    # Stop Kafka consumers/producers (best-effort)
-    try:
-        from app.services.kafka_producer import stop_producer
-        from app.services.kafka_consumers.ai_processor import stop_ai_processor
-        from app.services.kafka_consumers.wukong_forwarder import stop_wukong_forwarder
-        from app.services.kafka_consumers.platform_forwarder import stop_platform_forwarder
-        await stop_ai_processor()
-        await stop_wukong_forwarder()
-        await stop_platform_forwarder()
-        await stop_producer()
     except Exception:
         pass
 

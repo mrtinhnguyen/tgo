@@ -1126,6 +1126,8 @@
       "maxFileSize": "文件大小不能超过 10MB",
       "unsupportedFormat": "不支持的文件格式",
       "multipleSuccessMessage": "{{count}} 个文件上传成功",
+      "partialSuccess": "部分上传成功",
+      "partialSuccessMessage": "{{success}} 个文件上传成功，{{failed}} 个文件上传失败",
       "checkingEmbedding": "检查嵌入模型配置...",
       "noEmbeddingModel": {
         "title": "⚠️ 无法上传文件",
@@ -2256,7 +2258,7 @@
       "infoText": "当AI员工无法解决用户问题时，系统会自动将对话分配给人工坐席。人工坐席可以接管对话，为用户提供更专业的人工服务。",
       "staffItem": "坐席 {{index}}",
       "username": "用户名",
-      "usernamePlaceholder": "请输入用户名",
+      "usernamePlaceholder": "请输入用户名（至少4位，仅英文/数字）",
       "name": "姓名",
       "namePlaceholder": "请输入坐席姓名",
       "password": "密码",
@@ -2268,7 +2270,8 @@
       "requiredHint": "* 至少需要添加一个人工坐席",
       "validation": {
         "usernameRequired": "请输入用户名",
-        "usernameLength": "用户名长度需在1-50个字符之间",
+        "usernameLength": "用户名长度需在4-50个字符之间",
+        "usernameFormat": "用户名仅支持英文和数字，不包含空格及特殊字符",
         "nameRequired": "请输入姓名",
         "passwordRequired": "请输入密码",
         "passwordLength": "密码长度至少8个字符",

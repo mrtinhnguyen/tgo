@@ -57,6 +57,7 @@ const ChatWindow: React.FC<ChatWindowProps> = React.memo(({ activeChat, onSendMe
 
   // Dev mode state
   const devMode = useAppSettingsStore(state => state.devMode);
+  const canShowDevTools = import.meta.env.DEV;
 
   // Get current user info for message attribution
   const user = useAuthStore(state => state.user);
@@ -361,7 +362,7 @@ const ChatWindow: React.FC<ChatWindowProps> = React.memo(({ activeChat, onSendMe
       />
 
       {/* Dev Mode Toolbar - only shown when dev mode is enabled */}
-      {devMode && (
+      {canShowDevTools && devMode && (
         <DevModeToolbar onSendMessage={handleDevModeMessage} />
       )}
     </main>

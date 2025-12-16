@@ -16,6 +16,7 @@ interface FileUploadProps {
   isVisible: boolean;
   onToggle: () => void;
   uploadProgress?: Map<string, FileUploadProgress>;
+  onRemoveUploadProgress?: (fileId: string) => void;
   hasEmbeddingModel?: boolean;
   isCheckingEmbedding?: boolean;
 }
@@ -35,6 +36,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   onUpload,
   isVisible,
   uploadProgress,
+  onRemoveUploadProgress,
   hasEmbeddingModel = true,
   isCheckingEmbedding = false
 }) => {
@@ -154,9 +156,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
   // Remove upload file from progress (this will be handled by the service)
   const removeUploadFile = (fileId: string) => {
-    // In a real implementation, this might cancel the upload
-    // For now, we'll just hide it from the UI
-    console.log('Remove upload file:', fileId);
+    onRemoveUploadProgress?.(fileId);
   };
 
   // Get file type icon

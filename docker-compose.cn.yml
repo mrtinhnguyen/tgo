@@ -18,9 +18,6 @@ services:
 
   # wukongim already uses Alibaba Cloud registry, no override needed
 
-  kafka:
-    image: registry.cn-shanghai.aliyuncs.com/tgoai/kafka:4.1.1
-
   # TGO application services - using Alibaba Cloud ACR
   tgo-rag-worker:
     image: registry.cn-shanghai.aliyuncs.com/tgoai/tgo-rag:latest

@@ -14,11 +14,11 @@ CMD=${1:-}
 
 case "$CMD" in
   start)
-    echo "[INFO] Starting debug tools (kafka-ui, adminer)..."
+    echo "[INFO] Starting debug tools (adminer, redis-insight)..."
     docker compose -f "$TOOLS_COMPOSE_FILE" up -d
     ;;
   stop)
-    echo "[INFO] Stopping debug tools (kafka-ui, adminer)..."
+    echo "[INFO] Stopping debug tools (adminer, redis-insight)..."
     docker compose -f "$TOOLS_COMPOSE_FILE" down
     ;;
   *)

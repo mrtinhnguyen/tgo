@@ -472,6 +472,7 @@ export class KnowledgeBaseApiService extends BaseApiService {
   ): Promise<FileResponse> {
     const service = new KnowledgeBaseApiService();
     try {
+      console.log('error111-->');
       const formData = new FormData();
       formData.append('file', file);
       if (metadata?.collection_id) formData.append('collection_id', metadata.collection_id);
@@ -480,6 +481,7 @@ export class KnowledgeBaseApiService extends BaseApiService {
       if (metadata?.tags?.length) formData.append('tags', JSON.stringify(metadata.tags));
       return await apiClient.postFormData<FileResponse>(service.endpoints.FILES, formData);
     } catch (error) {
+      console.log('error222-->', error);
       throw new Error(handleApiError(error));
     }
   }

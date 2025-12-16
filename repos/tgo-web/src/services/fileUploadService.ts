@@ -71,6 +71,9 @@ export const uploadFileWithProgress = (
     // Create XMLHttpRequest for progress tracking
     const xhr = new XMLHttpRequest();
 
+    // Track if we've already handled the response (to avoid duplicate handling)
+    let responseHandled = false;
+
     // Set up progress tracking
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable) {
@@ -91,6 +94,10 @@ export const uploadFileWithProgress = (
 
     // Handle upload completion
     xhr.addEventListener('load', () => {
+      // Skip if already handled by onreadystatechange
+      if (responseHandled) return;
+      responseHandled = true;
+      
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response: FileResponse = JSON.parse(xhr.responseText);
@@ -180,7 +187,21 @@ export const uploadFileWithProgress = (
 
     // Handle network errors
     xhr.addEventListener('error', () => {
-      const networkError = new Error('网络连接失败，请检查网络连接后重试');
+      // Skip if already handled by onreadystatechange
+      if (responseHandled) return;
+      responseHandled = true;
+      
+      // Try to determine error type - 413 from nginx may close connection before response
+      let errorMessage = '网络连接失败，请检查网络连接后重试';
+      
+      // Check if the status is available (may be 0 for network errors)
+      if (xhr.status === 413) {
+        errorMessage = '文件过大，请选择较小的文件';
+      } else if (xhr.status >= 400) {
+        errorMessage = `上传失败 (${xhr.status})`;
+      }
+      
+      const networkError = new Error(errorMessage);
       
       const errorEvent: UploadProgressEvent = {
         fileId,
@@ -199,6 +220,10 @@ export const uploadFileWithProgress = (
 
     // Handle upload abort
     xhr.addEventListener('abort', () => {
+      // Skip if already handled (abort may be called after error handling)
+      if (responseHandled) return;
+      responseHandled = true;
+      
       const abortError = new Error('上传已取消');
       
       const errorEvent: UploadProgressEvent = {
@@ -215,6 +240,41 @@ export const uploadFileWithProgress = (
       
       reject(abortError);
     });
+
+    // Handle early response (e.g., nginx 413 before upload completes)
+    xhr.onreadystatechange = () => {
+      // HEADERS_RECEIVED (2) or later, and we have a non-success status
+      if (xhr.readyState >= 2 && xhr.status >= 400 && !responseHandled) {
+        responseHandled = true;
+        
+        let errorMessage = `上传失败 (${xhr.status})`;
+        if (xhr.status === 413) {
+          errorMessage = '文件过大，服务器拒绝接收。请选择较小的文件或联系管理员调整上传限制。';
+        } else if (xhr.status === 401) {
+          errorMessage = '身份验证失败，请重新登录';
+        } else if (xhr.status === 403) {
+          errorMessage = '权限不足，无法上传文件';
+        }
+        
+        const uploadError = new Error(errorMessage);
+        
+        const errorEvent: UploadProgressEvent = {
+          fileId,
+          fileName: file.name,
+          progress: 0,
+          loaded: 0,
+          total: file.size,
+          status: 'error',
+          error: errorMessage,
+        };
+        options.onProgress?.(errorEvent);
+        options.onError?.(uploadError);
+        
+        // Abort the upload since we already have an error response
+        xhr.abort();
+        reject(uploadError);
+      }
+    };
 
     // Set up request
     xhr.open('POST', uploadUrl);

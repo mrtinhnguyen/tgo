@@ -307,34 +307,6 @@ class Settings(BaseSettings):
         description="WuKongIM device level (0=secondary, 1=primary)"
     )
 
-    # Kafka settings
-    KAFKA_BOOTSTRAP_SERVERS: str = Field(
-        default="",
-        description="Kafka bootstrap servers (comma-separated)"
-    )
-    KAFKA_TOPIC_INCOMING_MESSAGES: str = Field(
-        default="tgo.messages.incoming",
-        description="Kafka topic for incoming messages"
-    )
-    KAFKA_TOPIC_AI_RESPONSES: str = Field(
-        default="tgo.ai.responses",
-        description="Kafka topic for AI streaming responses"
-    )
-    KAFKA_CONSUMER_GROUP_AI_PROCESSOR: str = Field(
-        default="tgo-ai-processor",
-        description="Kafka consumer group id for AI processing"
-    )
-    KAFKA_CONSUMER_GROUP_WUKONG_FORWARDER: str = Field(
-        default="tgo-wukong-forwarder",
-        description="Kafka consumer group id for WuKong forwarder"
-    )
-    KAFKA_CONSUMER_GROUP_PLATFORM_FORWARDER: str = Field(
-        default="tgo-platform-forwarder",
-        description="Kafka consumer group id for Platform forwarder"
-    )
-
-
-
     # Logging
     LOG_LEVEL: str = Field(
         default="INFO",

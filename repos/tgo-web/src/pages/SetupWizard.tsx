@@ -155,11 +155,16 @@ const SetupWizard: React.FC = () => {
       const itemErrors: { username?: string; password?: string; confirmPassword?: string; name?: string } = {};
 
       // Username is required
-      if (!staff.username.trim()) {
+      const username = staff.username.trim();
+      if (!username) {
         itemErrors.username = t('setup.staff.validation.usernameRequired');
         hasErrors = true;
-      } else if (staff.username.length < 1 || staff.username.length > 50) {
+      } else if (username.length < 4 || username.length > 50) {
         itemErrors.username = t('setup.staff.validation.usernameLength');
+        hasErrors = true;
+      } else if (!/^[A-Za-z0-9]+$/.test(username)) {
+        // English letters/numbers only, no spaces or special characters
+        itemErrors.username = t('setup.staff.validation.usernameFormat');
         hasErrors = true;
       }
 
@@ -304,7 +309,7 @@ const SetupWizard: React.FC = () => {
         // Create staff members using batch API
         await setupApiService.createStaffBatch({
           staff_list: staffList.map(staff => ({
-            username: staff.username,
+            username: staff.username.trim(),
             password: staff.password,
             name: staff.name || null,
           })),
