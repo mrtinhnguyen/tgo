@@ -1377,6 +1377,28 @@
     },
     "unknown": {
       "label": "未知平台"
+    },
+    "aiSettings": {
+      "title": "AI 设置",
+      "optional": "可选",
+      "agents": "AI 员工",
+      "loadingAgents": "加载中...",
+      "selectAgents": "选择 AI 员工",
+      "noAgents": "暂无 AI 员工",
+      "agentsHint": "选择分配给此平台的 AI 员工，支持多选。",
+      "agentsHintDefault": "未选择时默认可使用所有 AI 员工。",
+      "mode": "AI 模式",
+      "modeAuto": "自动",
+      "modeAssist": "辅助",
+      "modeOff": "关闭",
+      "modeAutoHint": "AI 自动处理所有消息。",
+      "modeAssistHint": "人工优先处理，超时后 AI 自动接管。",
+      "modeOffHint": "禁用 AI，仅人工处理消息。",
+      "timeout": "超时时间 (秒)",
+      "timeoutPlaceholder": "例如：60",
+      "timeoutHint": "消息多少秒无回复后 AI 自动接管。设置为 0 表示 AI 不会接管。",
+      "saveSuccess": "AI 设置已保存",
+      "saveButton": "保存 AI 设置"
     }
   },
   "ai": {

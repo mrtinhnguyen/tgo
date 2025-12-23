@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Webhook, Copy, Eye, EyeOff, RefreshCw, Settings, Pencil } from 'lucide-react';
-import type { Platform, PlatformConfig as PlatformConfigType } from '@/types';
+import PlatformAISettings from '@/components/platforms/PlatformAISettings';
+import type { Platform, PlatformConfig as PlatformConfigType, PlatformAIMode } from '@/types';
+import { usePlatformStore } from '@/stores/platformStore';
+import { useToast } from '@/hooks/useToast';
+import { showApiError, showSuccess } from '@/utils/toastHelpers';
 
 interface BasicSettingsProps {
   platform: Platform;
@@ -278,6 +282,46 @@ interface PlatformConfigProps {
  */
 const PlatformConfig: React.FC<PlatformConfigProps> = ({ platform, onUpdate, onToggle }) => {
   const { t } = useTranslation();
+  const { showToast } = useToast();
+  const updatePlatform = usePlatformStore(s => s.updatePlatform);
+
+  // AI Settings state
+  const [aiAgentIds, setAiAgentIds] = useState<string[]>(platform?.agent_ids ?? []);
+  const [aiMode, setAiMode] = useState<PlatformAIMode>(platform?.ai_mode ?? 'auto');
+  const [fallbackTimeout, setFallbackTimeout] = useState<number | null>(platform?.fallback_to_ai_timeout ?? null);
+
+  useEffect(() => {
+    if (platform) {
+      setAiAgentIds(platform.agent_ids ?? []);
+      setAiMode(platform.ai_mode ?? 'auto');
+      setFallbackTimeout(platform.fallback_to_ai_timeout ?? null);
+    }
+  }, [platform?.agent_ids, platform?.ai_mode, platform?.fallback_to_ai_timeout]);
+
+  const hasAISettingsChanged = useMemo(() => {
+    if (!platform) return false;
+    const origAgentIds = platform.agent_ids ?? [];
+    const origMode = platform.ai_mode ?? 'auto';
+    const origTimeout = platform.fallback_to_ai_timeout ?? null;
+    const agentIdsChanged = JSON.stringify(aiAgentIds.sort()) !== JSON.stringify([...origAgentIds].sort());
+    const modeChanged = aiMode !== origMode;
+    const timeoutChanged = fallbackTimeout !== origTimeout;
+    return agentIdsChanged || modeChanged || timeoutChanged;
+  }, [aiAgentIds, aiMode, fallbackTimeout, platform]);
+
+  const handleSaveAISettings = async () => {
+    if (!platform) return;
+    try {
+      await updatePlatform(platform.id, {
+        agent_ids: aiAgentIds.length > 0 ? aiAgentIds : null,
+        ai_mode: aiMode,
+        fallback_to_ai_timeout: aiMode === 'assist' ? fallbackTimeout : null,
+      });
+      showSuccess(showToast, t('platforms.config.aiSettings.saveSuccess', 'AI 设置已保存'));
+    } catch (e) {
+      showApiError(showToast, e);
+    }
+  };
 
   if (!platform) {
     return (
@@ -354,6 +398,29 @@ const PlatformConfig: React.FC<PlatformConfigProps> = ({ platform, onUpdate, onT
             </div>
           </div>
         )}
+
+        {/* AI Settings */}
+        <div className="w-full">
+          <PlatformAISettings
+            platform={platform}
+            agentIds={aiAgentIds}
+            aiMode={aiMode}
+            fallbackTimeout={fallbackTimeout}
+            onAgentIdsChange={setAiAgentIds}
+            onAIModeChange={setAiMode}
+            onFallbackTimeoutChange={setFallbackTimeout}
+          />
+          {hasAISettingsChanged && (
+            <div className="mt-3 flex justify-end">
+              <button
+                onClick={handleSaveAISettings}
+                className="px-4 py-1.5 text-sm rounded-md bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600"
+              >
+                {t('platforms.config.aiSettings.saveButton', '保存 AI 设置')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

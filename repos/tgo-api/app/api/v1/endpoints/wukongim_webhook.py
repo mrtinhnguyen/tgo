@@ -17,9 +17,8 @@ from app.models.staff import StaffStatus
 from app.services.ai_client import AIServiceClient
 from app.services.wukongim_client import WuKongIMClient
 from app.services.visitor_notifications import notify_visitor_profile_updated
+from app.utils.const import MEMBER_TYPE_VISITOR, CHANNEL_TYPE_CUSTOMER_SERVICE
 from app.utils.encoding import parse_visitor_channel_id
-from app.utils.const import MEMBER_TYPE_VISITOR
-import httpx
 
 logger = logging.getLogger("webhooks.wukongim")
 
@@ -37,25 +36,6 @@ STREAM_EVENT_FALLBACK = "ai.stream"
 STAFF_API_CACHE: Dict[str, Tuple[str, float]] = {}
 STAFF_API_CACHE_LOCK = asyncio.Lock()
 
-
-def _resolve_messages(payload: Any) -> List[Dict[str, Any]]:
-    """Normalize msg.notify payload into a list of message dictionaries."""
-    if isinstance(payload, list):
-        candidates = payload
-    elif isinstance(payload, dict):
-        data = payload.get("data")
-        if isinstance(data, list):
-            candidates = data
-        elif isinstance(data, dict):
-            candidates = [data]
-        elif payload.get("payload"):
-            candidates = [payload]
-        else:
-            return []
-    else:
-        return []
-
-    return [msg for msg in candidates if isinstance(msg, dict)]
 
 
 def _normalize_status_events(payload: Any) -> List[Dict[str, Any]]:
@@ -147,103 +127,6 @@ def _parse_online_flag(entry: Dict[str, Any]) -> Optional[bool]:
     return None
 
 
-async def _process_msg_notify(messages_payload: Any) -> None:
-    """Background task entrypoint for processing msg.notify events."""
-    db: Session = SessionLocal()
-    try:
-        await _handle_msg_notify(messages_payload, db)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.error("Failed to process WuKongIM message batch: %s", exc)
-    finally:
-        db.close()
-
-
-async def _handle_msg_notify(messages_payload: Any, db: Session) -> None:
-    if not settings.WUKONGIM_ENABLED:
-        logger.debug("WuKongIM integration disabled; ignoring webhook event")
-        return
-
-    messages = _resolve_messages(messages_payload)
-    if not messages:
-        logger.debug("Empty WuKongIM msg.notify payload")
-        return
-    # Collect visitor messages in customer service channels and forward in batches per platform
-    try:
-        platform_groups: Dict[str, List[Dict[str, Any]]] = {}
-        visitor_cache: Dict[UUID, Optional[Visitor]] = {}
-        for m in messages:
-            try:
-                if m.get("channel_type") != 251:
-                    continue
-                ch_id = str(m.get("channel_id") or "")
-                visitor_uuid = parse_visitor_channel_id(ch_id)
-                if visitor_uuid in visitor_cache:
-                    visitor_obj = visitor_cache[visitor_uuid]
-                else:
-                    visitor_obj = (
-                        db.query(Visitor)
-                        .filter(
-                            Visitor.id == visitor_uuid,
-                            Visitor.deleted_at.is_(None),
-                        )
-                        .first()
-                    )
-                    visitor_cache[visitor_uuid] = visitor_obj
-
-                if not visitor_obj:
-                    logger.error("Visitor not found for channel_id", extra={"channel_id": ch_id})
-                    continue
-                pid = visitor_obj.platform_id
-                if not pid:
-                    logger.error("Visitor missing platform_id", extra={"visitor_id": str(visitor_uuid)})
-                    continue
-                pid_str = str(pid)
-
-                # Add platform_open_id to the message
-                enriched_msg = {
-                    **m,
-                    "platform_open_id": visitor_obj.platform_open_id,
-                }
-                platform_groups.setdefault(pid_str, []).append(enriched_msg)
-            except Exception:
-                logger.error("Error evaluating message for platform forwarding", extra={"message": m})
-                continue
-
-        # Forward batches per platform
-        if platform_groups:
-            async with httpx.AsyncClient(timeout=settings.PLATFORM_SERVICE_TIMEOUT) as client:
-                for pid_str, msgs in platform_groups.items():
-                    platform = None
-                    try:
-                        pid = UUID(pid_str)
-                        platform = (
-                            db.query(Platform)
-                            .filter(
-                                Platform.id == pid,
-                                Platform.deleted_at.is_(None),
-                                Platform.is_active.is_(True),
-                            )
-                            .first()
-                        )
-                    except Exception:
-                        logger.error("Invalid platform_id while grouping messages", extra={"platform_id": pid_str})
-
-                    if not platform:
-                        logger.warning("Platform not found or inactive; skipping forwarding batch", extra={"platform_id": pid_str})
-                        continue
-
-                    target_url = f"{settings.PLATFORM_SERVICE_URL.rstrip('/')}/v1/platforms/callback/{platform.api_key}?event=msg.notify&source=wukongim"
-
-                    try:
-                        await client.post(target_url, json=msgs)
-                    except httpx.TimeoutException:
-                        logger.error("Platform Service timeout while forwarding batch", extra={"url": target_url, "platform_id": pid_str})
-                    except httpx.RequestError as exc:
-                        logger.error("Platform Service request error: %s", exc, extra={"url": target_url, "platform_id": pid_str})
-    except Exception as exc:
-        logger.error("Unexpected error while batch-forwarding to Platform Service: %s", exc)
-
-
 
 async def _process_user_online_status(status_payload: Any) -> None:
     """Entry point for handling user.onlinestatus events."""
@@ -254,6 +137,134 @@ async def _process_user_online_status(status_payload: Any) -> None:
         logger.error("Failed to process WuKongIM user.onlinestatus event: %s", exc)
     finally:
         db.close()
+
+
+async def _process_msg_notify(messages: Any) -> None:
+    """Entry point for handling msg.notify events (batch processing)."""
+    db: Session = SessionLocal()
+    try:
+        await _handle_msg_notify_batch(messages, db)
+    except Exception as exc:
+        logger.error("Failed to process WuKongIM msg.notify event: %s", exc)
+    finally:
+        db.close()
+
+
+async def _handle_msg_notify_batch(messages: Any, db: Session) -> None:
+    """Handle msg.notify events to update visitor message stats in batch.
+    
+    Args:
+        messages: List of message notification objects from WuKongIM
+        db: Database session
+    """
+    # Normalize input to list
+    if not isinstance(messages, list):
+        messages = [messages] if isinstance(messages, dict) else []
+    
+    if not messages:
+        return
+    
+    # Group messages by visitor_id for efficient batch processing
+    # Structure: {visitor_id: {"max_seq": int, "client_msg_no": str, "send_count": int, "is_last_from_visitor": bool}}
+    visitor_stats: Dict[UUID, Dict[str, Any]] = {}
+    
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        
+        from_uid = msg.get("from_uid")
+        channel_id = msg.get("channel_id")
+        channel_type = msg.get("channel_type")
+        
+        # Only process messages in customer service channels
+        if channel_type != CHANNEL_TYPE_CUSTOMER_SERVICE or not channel_id:
+            continue
+        
+        try:
+            visitor_id = parse_visitor_channel_id(channel_id)
+        except Exception:
+            logger.warning(
+                "WuKongIM msg.notify contains invalid visitor channel ID",
+                extra={"channel_id": channel_id}
+            )
+            continue
+        
+        message_seq = msg.get("message_seq", 0)
+        client_msg_no = msg.get("client_msg_no")
+        is_from_visitor = bool(from_uid and from_uid.endswith(VISITOR_UID_SUFFIX))
+        
+        # Initialize or update aggregated stats for this visitor
+        if visitor_id not in visitor_stats:
+            visitor_stats[visitor_id] = {
+                "max_seq": 0,
+                "client_msg_no": None,
+                "send_count": 0,
+                "is_last_from_visitor": False,
+            }
+        
+        stats = visitor_stats[visitor_id]
+        
+        # Track the message with highest sequence number for last_message fields
+        if message_seq > stats["max_seq"]:
+            stats["max_seq"] = message_seq
+            stats["client_msg_no"] = client_msg_no
+            stats["is_last_from_visitor"] = is_from_visitor
+        
+        # Count messages sent by visitor
+        if is_from_visitor:
+            stats["send_count"] += 1
+    
+    if not visitor_stats:
+        return
+    
+    # Fetch all relevant visitors in one query
+    visitor_ids = list(visitor_stats.keys())
+    visitors = (
+        db.query(Visitor)
+        .filter(Visitor.id.in_(visitor_ids), Visitor.deleted_at.is_(None))
+        .all()
+    )
+    
+    if not visitors:
+        logger.debug(
+            "No visitors found for msg.notify batch update",
+            extra={"visitor_ids": [str(vid) for vid in visitor_ids]}
+        )
+        return
+    
+    now = datetime.utcnow()
+    updated_visitors = []
+    
+    for visitor in visitors:
+        stats = visitor_stats.get(visitor.id)
+        if not stats:
+            continue
+        
+        visitor.last_message_at = now
+        
+        if stats["max_seq"] > 0:
+            visitor.last_message_seq = stats["max_seq"]
+        
+        if stats["client_msg_no"]:
+            visitor.last_client_msg_no = stats["client_msg_no"]
+        
+        visitor.is_last_message_from_visitor = stats["is_last_from_visitor"]
+        
+        if stats["send_count"] > 0:
+            visitor.visitor_send_count += stats["send_count"]
+        
+        updated_visitors.append({
+            "visitor_id": str(visitor.id),
+            "send_count": visitor.visitor_send_count,
+            "last_message_seq": visitor.last_message_seq,
+        })
+    
+    if updated_visitors:
+        db.commit()
+        logger.info(
+            f"Batch updated {len(updated_visitors)} visitors message stats",
+            extra={"updated_visitors": updated_visitors}
+        )
 
 
 async def _handle_user_online_status(events_payload: Any, db: Session) -> None:
@@ -471,7 +482,7 @@ async def wukongim_webhook(request: Request, background_tasks: BackgroundTasks) 
     """Handle WuKongIM webhook callbacks."""
 
     event = request.query_params.get("event")
-    logger.info("WuKongIM webhook received", extra={"event": event})
+    logger.info("WuKongIM webhook received1", extra={"event": event})
 
     if event == "user.onlinestatus":
         try:
@@ -480,5 +491,12 @@ async def wukongim_webhook(request: Request, background_tasks: BackgroundTasks) 
             logger.error("Failed to parse WuKongIM user.onlinestatus payload: %s", exc)
             return {"code": 400, "message": "invalid payload"}
         await _process_user_online_status(body)
+    elif event == "msg.notify":
+        try:
+            body = await request.json()
+        except Exception as exc:
+            logger.error("Failed to parse WuKongIM msg.notify payload: %s", exc)
+            return {"code": 400, "message": "invalid payload"}
+        await _process_msg_notify(body)
 
     return {"code": 0, "message": "ok"}

@@ -66,11 +66,10 @@ async def close_visitor_session(
         
         if last_message:
             # Update session with last message info
-            if "message_seq" in last_message:
-                session.last_message_seq = last_message["message_seq"]
-            if "timestamp" in last_message:
+            session.last_message_seq = last_message.message_seq
+            if last_message.timestamp:
                 # WuKongIM timestamp is in seconds
-                session.last_message_at = datetime.fromtimestamp(last_message["timestamp"])
+                session.last_message_at = datetime.fromtimestamp(last_message.timestamp)
             logger.debug(f"Updated session with last message info: seq={session.last_message_seq}")
     except Exception as e:
         logger.warning(f"Failed to get channel last message: {e}")

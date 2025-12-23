@@ -277,6 +277,7 @@ class AIServiceClient:
         enable_memory: Optional[bool] = None,
         system_message: Optional[str] = None,
         expected_output: Optional[str] = None,
+        agent_ids: Optional[List[str]] = None,
     ) -> AsyncGenerator[Tuple[str, Any], None]:
         """Stream supervisor agent events as they arrive."""
         payload: Dict[str, Any] = {
@@ -287,6 +288,8 @@ class AIServiceClient:
             payload["team_id"] = team_id
         if agent_id:
             payload["agent_id"] = agent_id
+        if agent_ids:
+            payload["agent_ids"] = agent_ids
         if session_id:
             payload["session_id"] = session_id
         if user_id:
@@ -346,7 +349,7 @@ class AIServiceClient:
                             if not data_lines:
                                 event_name = None
                                 continue
-                            data_text = '\\n'.join(data_lines)
+                            data_text = '\n'.join(data_lines)
                             try:
                                 parsed = json.loads(data_text)
                             except json.JSONDecodeError:
@@ -363,7 +366,7 @@ class AIServiceClient:
                             data_lines.append(line.split(":", 1)[1].strip())
 
                     if data_lines:
-                        data_text = '\\n'.join(data_lines)
+                        data_text = '\n'.join(data_lines)
                         try:
                             parsed = json.loads(data_text)
                         except json.JSONDecodeError:
@@ -597,7 +600,6 @@ class AIServiceClient:
             "DELETE", f"/api/v1/tools/{tool_id}", params={"project_id": project_id}
         )
         return await self._handle_response(response)
-
 
 
 

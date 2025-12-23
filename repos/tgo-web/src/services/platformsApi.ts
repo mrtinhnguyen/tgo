@@ -1,5 +1,5 @@
 import { BaseApiService } from './base/BaseApiService';
-import type { PlatformType, PaginationMetadata } from '@/types';
+import type { PlatformType, PaginationMetadata, PlatformAIMode } from '@/types';
 import { apiClient } from './api';
 
 
@@ -40,6 +40,10 @@ export interface PlatformResponse {
   deleted_at?: string | null;
   created_at: string;
   updated_at: string;
+  // AI settings (top-level fields)
+  agent_ids?: string[] | null; // List of AI Agent IDs assigned to this platform
+  ai_mode?: PlatformAIMode | null; // AI mode: auto, assist, or off
+  fallback_to_ai_timeout?: number | null; // Timeout in seconds before AI takes over (assist mode)
 }
 // OpenAPI: PlatformUpdate (partial)
 export interface PlatformUpdateRequest {
@@ -47,6 +51,10 @@ export interface PlatformUpdateRequest {
   type?: PlatformType | null; // usually immutable; keep for completeness
   config?: Record<string, any> | null;
   is_active?: boolean | null;
+  // AI settings
+  agent_ids?: string[] | null;
+  ai_mode?: PlatformAIMode | null;
+  fallback_to_ai_timeout?: number | null;
 }
 
 

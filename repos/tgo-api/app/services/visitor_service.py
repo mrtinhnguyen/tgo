@@ -224,6 +224,8 @@ async def create_visitor_with_channel(
         geo_region=geo_location.region,
         geo_city=geo_location.city,
         geo_isp=geo_location.isp,
+        first_visit_time=datetime.utcnow(),
+        last_visit_time=datetime.utcnow(),
     )
     db.add(visitor)
     

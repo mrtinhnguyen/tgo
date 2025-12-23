@@ -1513,11 +1513,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "description": "Sort field: 'created_at' or 'last_visit_time'",
+              "description": "Sort field: 'created_at', 'last_visit_time', or 'last_offline_time'",
               "default": "created_at",
               "title": "Sort By"
             },
-            "description": "Sort field: 'created_at' or 'last_visit_time'"
+            "description": "Sort field: 'created_at', 'last_visit_time', or 'last_offline_time'"
           },
           {
             "name": "sort_order",
@@ -4374,7 +4374,7 @@
           "Platforms"
         ],
         "summary": "Wecom Callback Verify",
-        "description": "WeCom (企业微信) callback URL verification (GET).\n\nWeCom sends msg_signature, timestamp, nonce, and echostr for verification.\nWe verify the signature and decrypt echostr (if encryption enabled), then\nreturn the decrypted plain text as the response body.",
+        "description": "WeCom (企业微信/企业微信机器人) callback URL verification (GET).\n\nWeCom sends msg_signature, timestamp, nonce, and echostr for verification.\nWe verify the signature and decrypt echostr (if encryption enabled), then\nreturn the decrypted plain text as the response body.\n\nSupports both 'wecom' (企业微信) and 'wecom_bot' (企业微信机器人) platform types.",
         "operationId": "wecom_callback_verify_v1_platforms_callback__platform_api_key__get",
         "parameters": [
           {
@@ -10003,7 +10003,7 @@
           "Chat"
         ],
         "summary": "流式聊天完成接口",
-        "description": "## 概述\n访客聊天接口，支持 Server-Sent Events (SSE) 流式响应和非流式 JSON 响应。\n\n## 认证方式\n通过请求体中的 `api_key` 字段传递平台 API Key。\n\n## 请求参数\n| 参数 | 类型 | 必填 | 说明 |\n|------|------|------|------|\n| api_key | string | ✅ | 平台 API Key |\n| message | string | ✅ | 用户消息内容 |\n| from_uid | string | ✅ | 平台用户唯一标识 |\n| extra | object | ❌ | 额外数据（会随消息转发） |\n| timeout_seconds | int | ❌ | 超时时间（默认120秒） |\n| channel_id | string | ❌ | 自定义频道ID |\n| channel_type | int | ❌ | 频道类型（默认251=客服） |\n| system_message | string | ❌ | AI系统提示词 |\n| expected_output | string | ❌ | 期望的输出格式描述 |\n| wukongim_only | bool | ❌ | 是否仅发送到WuKongIM不返回流（默认false） |\n| stream | bool | ❌ | 是否使用流式响应（默认true）。false返回完整JSON |\n\n## 响应模式\n\n### 1. 流式响应（stream=true，默认）\n返回 `text/event-stream` 格式的 SSE 流。\n\n### 2. 非流式响应（stream=false）\n返回 JSON 格式的完整响应：\n```json\n{\n  \"success\": true,\n  \"message\": \"AI回复的完整内容...\",\n  \"visitor_id\": \"访客UUID\"\n}\n```\n\n## SSE 响应事件类型（仅 stream=true 时）\n\n### 成功事件\n| event_type | 说明 | data 结构 |\n|------------|------|-----------|\n| `team_run_started` | AI开始处理 | `{}` |\n| `team_run_content` | AI输出内容块 | `{\"content\": \"文本块\"}` |\n| `workflow_completed` | AI处理完成 | `{}` |\n| `accepted` | 请求已接受（wukongim_only=true时） | `{\"message\": \"Request accepted...\"}` |\n\n### 错误/状态事件\n| event_type | 说明 | data 结构 |\n|------------|------|-----------|\n| `error` | 发生错误 | `{\"message\": \"错误信息\", \"visitor_id\": \"...\"}` |\n| `queued` | 访客已加入等待队列（无可用客服） | `{\"message\": \"...\", \"visitor_id\": \"...\", \"queue_position\": 1}` |\n| `ai_disabled` | AI已禁用 | `{\"message\": \"AI responses are disabled...\"}` |\n| `workflow_failed` | AI工作流执行失败 | `{\"message\": \"错误详情\"}` |\n\n## 错误场景\n\n### 1. 无效的 API Key\n返回 HTTP 401:\n```json\n{\"detail\": \"Invalid platform API key\"}\n```\n\n### 2. 平台未关联项目\n返回 HTTP 400:\n```json\n{\"detail\": \"Platform not associated with any project\"}\n```\n\n### 3. 客服分配失败\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"error\", \"data\": {\"success\": false, \"event_type\": \"error\", \"message\": \"...\", \"visitor_id\": \"...\"}}\n```\n\n**stream=false（JSON）:**\n```json\n{\"success\": false, \"event_type\": \"error\", \"message\": \"Transfer failed: ...\", \"visitor_id\": \"...\"}\n```\n\n### 4. 无可用客服（已加入队列）\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"queued\", \"data\": {\"success\": false, \"message\": \"...\", \"visitor_id\": \"...\", \"queue_position\": 1}}\n```\n\n**stream=false（JSON）:**\n```json\n{\"success\": false, \"event_type\": \"queued\", \"message\": \"Added to waiting queue at position 1\", \"visitor_id\": \"...\", \"queue_position\": 1}\n```\n\n### 5. 无分配客服\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"error\", \"data\": {\"message\": \"No staff assigned to this visitor\", \"visitor_id\": \"...\"}}\n```\n\n**stream=false（HTTP 503）:**\n```json\n{\"detail\": {\"success\": false, \"event_type\": \"error\", \"message\": \"No staff assigned to this visitor\", \"visitor_id\": \"...\"}}\n```\n\n### 6. AI已禁用\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"ai_disabled\", \"data\": {\"message\": \"AI responses are disabled...\"}}\n```\n\n**stream=false（HTTP 403）:**\n```json\n{\"detail\": {\"success\": false, \"event_type\": \"ai_disabled\", \"message\": \"AI responses are disabled...\"}}\n```\n\n### 7. AI服务错误\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"error\", \"data\": {\"message\": \"AI service error: ...\"}}\n```\n\n**stream=false（HTTP 500）:**\n```json\n{\"detail\": \"AI service error: ...\"}\n```\n\n## SSE 响应格式示例\n```\ndata: {\"event_type\": \"team_run_started\", \"data\": {}}\n\ndata: {\"event_type\": \"team_run_content\", \"data\": {\"content\": \"你好\"}}\n\ndata: {\"event_type\": \"team_run_content\", \"data\": {\"content\": \"，有什么\"}}\n\ndata: {\"event_type\": \"team_run_content\", \"data\": {\"content\": \"可以帮助您的？\"}}\n\ndata: {\"event_type\": \"workflow_completed\", \"data\": {}}\n```\n\n## 前端使用示例\n```javascript\nconst eventSource = new EventSource('/api/v1/chat/completion', {\n  method: 'POST',\n  body: JSON.stringify({\n    api_key: 'your-api-key',\n    message: '你好',\n    from_uid: 'user123'\n  })\n});\n\neventSource.onmessage = (event) =\u003E {\n  const data = JSON.parse(event.data);\n  switch (data.event_type) {\n    case 'team_run_content':\n      // 追加内容到界面\n      appendText(data.data.content);\n      break;\n    case 'workflow_completed':\n      // 完成处理\n      eventSource.close();\n      break;\n    case 'error':\n    case 'queued':\n      // 处理错误或排队状态\n      handleError(data.data);\n      eventSource.close();\n      break;\n  }\n};\n```",
+        "description": "## 概述\n访客聊天接口，支持 Server-Sent Events (SSE) 流式响应和非流式 JSON 响应。\n\n## 认证方式\n通过请求体中的 `api_key` 字段传递平台 API Key。\n\n## 请求参数\n| 参数 | 类型 | 必填 | 说明 |\n|------|------|------|------|\n| api_key | string | ✅ | 平台 API Key |\n| message | string | ✅ | 用户消息内容 |\n| from_uid | string | ✅ | 平台用户唯一标识 |\n| extra | object | ❌ | 额外数据（会随消息转发） |\n| timeout_seconds | int | ❌ | 超时时间（默认120秒） |\n| channel_id | string | ❌ | 自定义频道ID |\n| channel_type | int | ❌ | 频道类型（默认251=客服） |\n| system_message | string | ❌ | AI系统提示词 |\n| expected_output | string | ❌ | 期望的输出格式描述 |\n| wukongim_only | bool | ❌ | 是否仅发送到WuKongIM不返回流（默认false） |\n| stream | bool | ❌ | 是否使用流式响应（默认true）。false返回完整JSON |\n\n## 响应模式\n\n### 1. 流式响应（stream=true，默认）\n返回 `text/event-stream` 格式的 SSE 流。\n\n### 2. 非流式响应（stream=false）\n返回 JSON 格式的完整响应：\n```json\n{\n  \"success\": true,\n  \"message\": \"AI回复的完整内容...\",\n  \"visitor_id\": \"访客UUID\"\n}\n```\n\n## SSE 响应事件类型（仅 stream=true 时）\n\n### 成功事件\n| event_type | 说明 | data 结构 |\n|------------|------|-----------|\n| `team_run_started` | AI开始处理 | `{}` |\n| `team_run_content` | AI输出内容块 | `{\"content\": \"文本块\"}` |\n| `team_run_completed` | AI处理完成 | `{}` |\n| `workflow_completed` | AI处理完成 | `{}` |\n| `accepted` | 请求已接受（wukongim_only=true时） | `{\"message\": \"Request accepted...\"}` |\n\n### 错误/状态事件\n| event_type | 说明 | data 结构 |\n|------------|------|-----------|\n| `error` | 发生错误 | `{\"message\": \"错误信息\", \"visitor_id\": \"...\"}` |\n| `queued` | 访客已加入等待队列（无可用客服） | `{\"message\": \"...\", \"visitor_id\": \"...\", \"queue_position\": 1}` |\n| `ai_disabled` | AI已禁用 | `{\"message\": \"AI responses are disabled...\"}` |\n| `assist_mode` | AI处于辅助模式（人工优先） | `{\"message\": \"Human service requested, AI is in assist mode\"}` |\n| `workflow_failed` | AI工作流执行失败 | `{\"message\": \"错误详情\"}` |\n\n## 错误场景\n\n### 1. 无效的 API Key\n返回 HTTP 401:\n```json\n{\"detail\": \"Invalid platform API key\"}\n```\n\n### 2. 平台未关联项目\n返回 HTTP 400:\n```json\n{\"detail\": \"Platform not associated with any project\"}\n```\n\n### 3. 客服分配失败\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"error\", \"data\": {\"success\": false, \"event_type\": \"error\", \"message\": \"...\", \"visitor_id\": \"...\"}}\n```\n\n**stream=false（JSON）:**\n```json\n{\"success\": false, \"event_type\": \"error\", \"message\": \"Transfer failed: ...\", \"visitor_id\": \"...\"}\n```\n\n### 4. 无可用客服（已加入队列）\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"queued\", \"data\": {\"success\": false, \"message\": \"...\", \"visitor_id\": \"...\", \"queue_position\": 1}}\n```\n\n**stream=false（JSON）:**\n```json\n{\"success\": false, \"event_type\": \"queued\", \"message\": \"Added to waiting queue at position 1\", \"visitor_id\": \"...\", \"queue_position\": 1}\n```\n\n### 5. 无分配客服\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"error\", \"data\": {\"message\": \"No staff assigned to this visitor\", \"visitor_id\": \"...\"}}\n```\n\n**stream=false（HTTP 503）:**\n```json\n{\"detail\": {\"success\": false, \"event_type\": \"error\", \"message\": \"No staff assigned to this visitor\", \"visitor_id\": \"...\"}}\n```\n\n### 6. AI已禁用\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"ai_disabled\", \"data\": {\"message\": \"AI responses are disabled...\"}}\n```\n\n**stream=false（HTTP 403）:**\n```json\n{\"detail\": {\"success\": false, \"event_type\": \"ai_disabled\", \"message\": \"AI responses are disabled...\"}}\n```\n\n### 7. AI服务错误\n\n**stream=true（SSE）:**\n```\ndata: {\"event_type\": \"error\", \"data\": {\"message\": \"AI service error: ...\"}}\n```\n\n**stream=false（HTTP 500）:**\n```json\n{\"detail\": \"AI service error: ...\"}\n```\n\n## SSE 响应格式示例\n```\ndata: {\"event_type\": \"team_run_started\", \"data\": {}}\n\ndata: {\"event_type\": \"team_run_content\", \"data\": {\"content\": \"你好\"}}\n\ndata: {\"event_type\": \"team_run_content\", \"data\": {\"content\": \"，有什么\"}}\n\ndata: {\"event_type\": \"team_run_content\", \"data\": {\"content\": \"可以帮助您的？\"}}\n\ndata: {\"event_type\": \"workflow_completed\", \"data\": {}}\n```\n\n## 前端使用示例\n```javascript\nconst eventSource = new EventSource('/api/v1/chat/completion', {\n  method: 'POST',\n  body: JSON.stringify({\n    api_key: 'your-api-key',\n    message: '你好',\n    from_uid: 'user123'\n  })\n});\n\neventSource.onmessage = (event) =\u003E {\n  const data = JSON.parse(event.data);\n  switch (data.event_type) {\n    case 'team_run_content':\n      // 追加内容到界面\n      appendText(data.data.content);\n      break;\n    case 'workflow_completed':\n      // 完成处理\n      eventSource.close();\n      break;\n    case 'error':\n    case 'queued':\n      // 处理错误或排队状态\n      handleError(data.data);\n      eventSource.close();\n      break;\n  }\n};\n```",
         "operationId": "chat_completion_v1_chat_completion_post",
         "requestBody": {
           "content": {
@@ -16419,6 +16419,62 @@
         "title": "PaginationMetadata",
         "description": "Pagination metadata for responses."
       },
+      "PlatformAIMode": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "assist",
+          "off"
+        ],
+        "title": "PlatformAIMode",
+        "description": "Platform AI mode enumeration."
+      },
+      "PlatformAISettings": {
+        "properties": {
+          "ai_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAIMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI mode: auto, assist, or off"
+          },
+          "agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Ids",
+            "description": "List of AI Agent IDs assigned to this platform"
+          },
+          "fallback_to_ai_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback To Ai Timeout",
+            "description": "Timeout in seconds before AI takes over when ai_mode=assist"
+          }
+        },
+        "type": "object",
+        "title": "PlatformAISettings",
+        "description": "AI configuration settings for a platform."
+      },
       "PlatformAPIKeyResponse": {
         "properties": {
           "id": {
@@ -16477,6 +16533,48 @@
             "title": "Is Active",
             "description": "Whether the platform is active",
             "default": true
+          },
+          "agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Ids",
+            "description": "List of AI Agent IDs assigned to this platform"
+          },
+          "ai_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAIMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI mode: auto (AI handles all), assist (human first, AI fallback), off (AI disabled)",
+            "default": "auto"
+          },
+          "fallback_to_ai_timeout": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback To Ai Timeout",
+            "description": "Timeout in seconds before AI takes over when ai_mode=assist. 0 means AI never takes over.",
+            "default": 0
           }
         },
         "type": "object",
@@ -16599,6 +16697,45 @@
             ],
             "title": "Name En",
             "description": "English name of the platform type"
+          },
+          "agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Ids",
+            "description": "List of AI Agent IDs assigned to this platform"
+          },
+          "ai_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAIMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI mode: auto, assist, or off"
+          },
+          "fallback_to_ai_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback To Ai Timeout",
+            "description": "Timeout in seconds before AI takes over when ai_mode=assist"
           },
           "logo_url": {
             "anyOf": [
@@ -16725,6 +16862,48 @@
             "title": "Is Active",
             "description": "Whether the platform is active",
             "default": true
+          },
+          "agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Ids",
+            "description": "List of AI Agent IDs assigned to this platform"
+          },
+          "ai_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAIMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI mode: auto (AI handles all), assist (human first, AI fallback), off (AI disabled)",
+            "default": "auto"
+          },
+          "fallback_to_ai_timeout": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback To Ai Timeout",
+            "description": "Timeout in seconds before AI takes over when ai_mode=assist. 0 means AI never takes over.",
+            "default": 0
           },
           "id": {
             "type": "string",
@@ -16871,7 +17050,10 @@
           "douyin",
           "tiktok",
           "custom",
-          "wecom"
+          "wecom",
+          "wecom_bot",
+          "feishu_bot",
+          "dingtalk_bot"
         ],
         "title": "PlatformType",
         "description": "Platform type enumeration."
@@ -17017,6 +17199,46 @@
             ],
             "title": "Ai Disabled",
             "description": "Whether AI responses are disabled for this platform"
+          },
+          "agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Ids",
+            "description": "List of AI Agent IDs assigned to this platform"
+          },
+          "ai_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAIMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI mode: auto (AI handles all), assist (human first, AI fallback), off (AI disabled)"
+          },
+          "fallback_to_ai_timeout": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback To Ai Timeout",
+            "description": "Timeout in seconds before AI takes over when ai_mode=assist. 0 means AI never takes over."
           }
         },
         "type": "object",
@@ -21454,6 +21676,17 @@
             ],
             "description": "Associated platform type (e.g., website, wechat)"
           },
+          "ai_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAISettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI configuration settings from the visitor's platform"
+          },
           "ai_disabled": {
             "anyOf": [
               {
@@ -21483,6 +21716,61 @@
             ],
             "title": "Last Offline Time",
             "description": "Most recent time visitor went offline"
+          },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At",
+            "description": "Time of the last message in the channel"
+          },
+          "visitor_send_count": {
+            "type": "integer",
+            "title": "Visitor Send Count",
+            "description": "Total number of messages sent by the visitor",
+            "default": 0
+          },
+          "last_message_seq": {
+            "type": "integer",
+            "title": "Last Message Seq",
+            "description": "Sequence number of the last message in the channel",
+            "default": 0
+          },
+          "last_client_msg_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Client Msg No",
+            "description": "Client message number of the last message in the channel"
+          },
+          "is_last_message_from_visitor": {
+            "type": "boolean",
+            "title": "Is Last Message From Visitor",
+            "description": "Whether the last message in the channel was sent by the visitor",
+            "default": false
+          },
+          "is_last_message_from_ai": {
+            "type": "boolean",
+            "title": "Is Last Message From Ai",
+            "description": "Whether the last message in the channel was sent by an AI",
+            "default": false
+          },
+          "ai_fallback_retry_count": {
+            "type": "integer",
+            "title": "Ai Fallback Retry Count",
+            "description": "Number of failed AI fallback attempts",
+            "default": 0
           },
           "service_status": {
             "type": "string",
@@ -22480,6 +22768,61 @@
             "description": "Visitor service status: new, queued, active, closed",
             "default": "new"
           },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At",
+            "description": "Time of the last message in the channel"
+          },
+          "visitor_send_count": {
+            "type": "integer",
+            "title": "Visitor Send Count",
+            "description": "Total number of messages sent by the visitor",
+            "default": 0
+          },
+          "last_message_seq": {
+            "type": "integer",
+            "title": "Last Message Seq",
+            "description": "Sequence number of the last message in the channel",
+            "default": 0
+          },
+          "last_client_msg_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Client Msg No",
+            "description": "Client message number of the last message in the channel"
+          },
+          "is_last_message_from_visitor": {
+            "type": "boolean",
+            "title": "Is Last Message From Visitor",
+            "description": "Whether the last message in the channel was sent by the visitor",
+            "default": false
+          },
+          "is_last_message_from_ai": {
+            "type": "boolean",
+            "title": "Is Last Message From Ai",
+            "description": "Whether the last message in the channel was sent by an AI",
+            "default": false
+          },
+          "ai_fallback_retry_count": {
+            "type": "integer",
+            "title": "Ai Fallback Retry Count",
+            "description": "Number of failed AI fallback attempts",
+            "default": 0
+          },
           "ip_address": {
             "anyOf": [
               {
@@ -22562,6 +22905,17 @@
               }
             ],
             "description": "Associated platform type (e.g., website, wechat)"
+          },
+          "ai_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAISettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI configuration settings from the visitor's platform"
           },
           "ai_disabled": {
             "anyOf": [
@@ -22965,6 +23319,61 @@
             "description": "Visitor service status: new, queued, active, closed",
             "default": "new"
           },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At",
+            "description": "Time of the last message in the channel"
+          },
+          "visitor_send_count": {
+            "type": "integer",
+            "title": "Visitor Send Count",
+            "description": "Total number of messages sent by the visitor",
+            "default": 0
+          },
+          "last_message_seq": {
+            "type": "integer",
+            "title": "Last Message Seq",
+            "description": "Sequence number of the last message in the channel",
+            "default": 0
+          },
+          "last_client_msg_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Client Msg No",
+            "description": "Client message number of the last message in the channel"
+          },
+          "is_last_message_from_visitor": {
+            "type": "boolean",
+            "title": "Is Last Message From Visitor",
+            "description": "Whether the last message in the channel was sent by the visitor",
+            "default": false
+          },
+          "is_last_message_from_ai": {
+            "type": "boolean",
+            "title": "Is Last Message From Ai",
+            "description": "Whether the last message in the channel was sent by an AI",
+            "default": false
+          },
+          "ai_fallback_retry_count": {
+            "type": "integer",
+            "title": "Ai Fallback Retry Count",
+            "description": "Number of failed AI fallback attempts",
+            "default": 0
+          },
           "ip_address": {
             "anyOf": [
               {
@@ -23047,6 +23456,17 @@
               }
             ],
             "description": "Associated platform type (e.g., website, wechat)"
+          },
+          "ai_settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformAISettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "AI configuration settings from the visitor's platform"
           },
           "ai_disabled": {
             "anyOf": [

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.models.platform import PlatformType
 from app.schemas.base import BaseSchema, PaginatedResponse, SoftDeleteMixin, TimestampMixin
 from app.schemas.tag import TagResponse
+from app.schemas.platform import PlatformAISettings
 
 
 def _resolve_avatar_url(avatar_url: Optional[str]) -> Optional[str]:
@@ -285,6 +286,13 @@ class VisitorInDB(VisitorBase, TimestampMixin, SoftDeleteMixin):
         default="new",
         description="Visitor service status: new, queued, active, closed"
     )
+    last_message_at: Optional[datetime] = Field(None, description="Time of the last message in the channel")
+    visitor_send_count: int = Field(0, description="Total number of messages sent by the visitor")
+    last_message_seq: int = Field(0, description="Sequence number of the last message in the channel")
+    last_client_msg_no: Optional[str] = Field(None, description="Client message number of the last message in the channel")
+    is_last_message_from_visitor: bool = Field(False, description="Whether the last message in the channel was sent by the visitor")
+    is_last_message_from_ai: bool = Field(False, description="Whether the last message in the channel was sent by an AI")
+    ai_fallback_retry_count: int = Field(0, description="Number of failed AI fallback attempts")
     ip_address: Optional[str] = Field(
         None,
         description="Visitor IP address (supports both IPv4 and IPv6)"
@@ -317,6 +325,10 @@ class VisitorResponse(VisitorInDB):
     platform_type: Optional[PlatformType] = Field(
         None,
         description="Associated platform type (e.g., website, wechat)"
+    )
+    ai_settings: Optional[PlatformAISettings] = Field(
+        None,
+        description="AI configuration settings from the visitor's platform"
     )
     ai_disabled: Optional[bool] = Field(
         None,
@@ -372,11 +384,22 @@ class VisitorBasicResponse(BaseSchema):
     platform_type: Optional[PlatformType] = Field(
         None, description="Associated platform type (e.g., website, wechat)"
     )
+    ai_settings: Optional[PlatformAISettings] = Field(
+        None,
+        description="AI configuration settings from the visitor's platform"
+    )
     ai_disabled: Optional[bool] = Field(
         None, description="Whether AI responses are disabled for this visitor"
     )
     is_online: bool = Field(..., description="Whether the visitor is currently online/active")
     last_offline_time: Optional[datetime] = Field(None, description="Most recent time visitor went offline")
+    last_message_at: Optional[datetime] = Field(None, description="Time of the last message in the channel")
+    visitor_send_count: int = Field(0, description="Total number of messages sent by the visitor")
+    last_message_seq: int = Field(0, description="Sequence number of the last message in the channel")
+    last_client_msg_no: Optional[str] = Field(None, description="Client message number of the last message in the channel")
+    is_last_message_from_visitor: bool = Field(False, description="Whether the last message in the channel was sent by the visitor")
+    is_last_message_from_ai: bool = Field(False, description="Whether the last message in the channel was sent by an AI")
+    ai_fallback_retry_count: int = Field(0, description="Number of failed AI fallback attempts")
     service_status: str = Field(
         default="new",
         description="Visitor service status: new, queued, active, closed"
@@ -658,3 +681,18 @@ def set_visitor_list_display_nickname(
     for response in responses:
         set_visitor_display_nickname(response, language)
     return responses
+
+
+def populate_visitor_ai_settings(
+    response: Union[VisitorResponse, VisitorBasicResponse],
+    platform: Any  # Should be a Platform model instance
+) -> Union[VisitorResponse, VisitorBasicResponse]:
+    """
+    Populate ai_settings field from platform model.
+    """
+    if platform:
+        response.ai_settings = PlatformAISettings(
+            ai_mode=getattr(platform, "ai_mode", None),
+            fallback_to_ai_timeout=getattr(platform, "fallback_to_ai_timeout", None)
+        )
+    return response

@@ -5,7 +5,7 @@
 
 import { BaseApiService } from './base/BaseApiService';
 import { apiClient } from './api';
-import type { Visitor, ChannelAIInsights } from '@/types';
+import type { Visitor, ChannelAIInsights, VisitorAISettings } from '@/types';
 
 // API Request/Response Types based on OpenAPI specification
 
@@ -69,6 +69,7 @@ export interface VisitorResponse {
   last_online_duration_minutes?: number | null;
   is_online: boolean;
   ai_disabled?: boolean; // True if AI is disabled for this visitor
+  ai_settings?: VisitorAISettings | null;
   tags: TagResponse[];
   ai_profile?: any | null;
   ai_insights?: ChannelAIInsights | null;

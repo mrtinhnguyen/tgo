@@ -19,9 +19,21 @@ export interface Platform {
   logo_url?: string | null;
   // Chat completion URL for custom platforms (only returned for type='custom')
   chat_url?: string | null;
+  // AI settings (top-level fields, not nested in config)
+  agent_ids?: string[] | null; // List of AI Agent IDs assigned to this platform
+  ai_mode?: PlatformAIMode | null; // AI mode: auto, assist, or off
+  fallback_to_ai_timeout?: number | null; // Timeout in seconds before AI takes over when ai_mode=assist
 }
 
 export type PlatformStatus = 'connected' | 'pending' | 'unconfigured' | 'disabled' | 'error';
+
+/**
+ * Platform AI mode enumeration
+ * - auto: AI handles all messages automatically
+ * - assist: Human first, AI takes over after timeout
+ * - off: AI disabled for this platform
+ */
+export type PlatformAIMode = 'auto' | 'assist' | 'off';
 
 export enum PlatformType {
   WEBSITE = "website",
@@ -832,6 +844,11 @@ export interface ChannelAIInsights {
   insight_summary: string | null;
 }
 
+export interface VisitorAISettings {
+  ai_mode: PlatformAIMode;
+  fallback_to_ai_timeout?: number | null;
+}
+
 // Visitor service status enum
 export type VisitorServiceStatus = 'new' | 'queued' | 'assigned_pending' | 'active' | 'closed';
 
@@ -859,6 +876,7 @@ export interface ChannelVisitorExtra {
   last_offline_time?: string;
   is_online?: boolean;
   ai_disabled?: boolean; // True means AI is disabled for this visitor
+  ai_settings?: VisitorAISettings | null;
   assigned_staff_id?: string; // ID of the staff member assigned to this visitor
   ai_insights?: ChannelAIInsights | null; // AI insights from backend
   tags?: VisitorTag[];

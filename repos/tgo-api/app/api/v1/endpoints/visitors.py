@@ -74,7 +74,11 @@ from app.schemas import (
     VisitorRegisterResponse,
     VisitorMessageSyncRequest,
 )
-from app.schemas.visitor import set_visitor_display_nickname, set_visitor_list_display_nickname
+from app.schemas.visitor import (
+    set_visitor_display_nickname,
+    set_visitor_list_display_nickname,
+    populate_visitor_ai_settings
+)
 from app.schemas.tag import set_tag_list_display_name
 
 from app.schemas.wukongim import WuKongIMChannelMessageSyncResponse
@@ -112,6 +116,7 @@ async def list_visitors(
 
     # Build query
     query = db.query(Visitor).options(
+        joinedload(Visitor.platform),
         selectinload(Visitor.visitor_tags).selectinload(VisitorTag.tag)
     ).filter(
         Visitor.project_id == current_user.project_id,
@@ -213,7 +218,12 @@ async def list_visitors(
 
     # Convert to response models
     accept_language = request.headers.get("Accept-Language")
-    visitor_responses = [VisitorResponse.model_validate(visitor) for visitor in visitors]
+    visitor_responses = []
+    for visitor in visitors:
+        vr = VisitorResponse.model_validate(visitor)
+        populate_visitor_ai_settings(vr, visitor.platform)
+        visitor_responses.append(vr)
+
     for vr in visitor_responses:
         localize_visitor_response_intent(vr, accept_language)
         if vr.tags:
@@ -329,6 +339,7 @@ async def create_visitor(
     await notify_visitor_profile_updated(db, visitor)
 
     response = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(response, visitor.platform)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
     set_visitor_display_nickname(response, user_language)
     return response
@@ -442,6 +453,10 @@ async def register_visitor(
             if real_language:
                 update_data["language"] = real_language
         any_updated = False
+        # Always update last_visit_time on engagement
+        visitor.last_visit_time = datetime.utcnow()
+        any_updated = True
+        
         for field in updatable_fields:
             if field in update_data and update_data[field] is not None:
                 setattr(visitor, field, update_data[field])
@@ -485,7 +500,9 @@ async def register_visitor(
 
     # 4) Build response with additional fields
     channel_id = build_visitor_channel_id(visitor.id)
-    base_payload = VisitorResponse.model_validate(visitor).model_dump()
+    visitor_response = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(visitor_response, visitor.platform)
+    base_payload = visitor_response.model_dump()
     resp = VisitorRegisterResponse.model_validate({
         **base_payload,
         "channel_id": channel_id,
@@ -541,6 +558,11 @@ async def record_visitor_activity(
     )
     if not visitor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
+
+    # Update visitor's last visit time
+    visitor.last_visit_time = datetime.utcnow()
+    db.add(visitor)
+    # Don't commit yet, we'll commit with the activity
 
     # 1.5) Update platform website info if it's a website type and not yet marked as used
     if platform.type == PlatformType.WEBSITE.value and not getattr(platform, "is_used", False):
@@ -806,6 +828,7 @@ async def get_visitor_by_channel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
 
     response = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(response, visitor.platform)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
     set_visitor_display_nickname(response, user_language)
     return response
@@ -837,6 +860,7 @@ async def get_visitor_basic(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
 
     response = VisitorBasicResponse.model_validate(visitor)
+    populate_visitor_ai_settings(response, visitor.platform)
     set_visitor_display_nickname(response, user_language)
     return response
 
@@ -866,6 +890,7 @@ async def get_visitor(
         visitor = (
             db.query(Visitor)
             .options(
+                joinedload(Visitor.platform),
                 selectinload(Visitor.visitor_tags).selectinload(VisitorTag.tag),
                 selectinload(Visitor.ai_profile),
                 selectinload(Visitor.ai_insight),
@@ -928,7 +953,13 @@ async def get_visitor(
             custom_attributes={},
             first_visit_time=now,
             last_visit_time=now,
-            last_offline_time=None,
+            last_message_at=None,
+                    visitor_send_count=0,
+                    last_message_seq=0,
+                    last_client_msg_no=None,
+                    is_last_message_from_visitor=False,
+                    is_last_message_from_ai=False,
+                    last_offline_time=None,
             is_online=False,
             created_at=now,
             updated_at=now,
@@ -941,6 +972,7 @@ async def get_visitor(
             recent_activities=[],
         )
 
+        populate_visitor_ai_settings(default_visitor_response, default_platform)
         set_visitor_display_nickname(default_visitor_response, user_language)
         return default_visitor_response
 
@@ -985,6 +1017,7 @@ async def get_visitor(
     ]
 
     visitor_payload = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(visitor_payload, visitor.platform)
     response = visitor_payload.model_copy(
         update={
             "tags": tag_responses,
@@ -1102,6 +1135,7 @@ async def set_visitor_attributes(
     await notify_visitor_profile_updated(db, visitor)
 
     response = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(response, visitor.platform)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
     set_visitor_display_nickname(response, user_language)
     return response
@@ -1157,6 +1191,7 @@ async def update_visitor(
     await notify_visitor_profile_updated(db, visitor)
 
     response = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(response, visitor.platform)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
     set_visitor_display_nickname(response, user_language)
     return response
@@ -1195,6 +1230,7 @@ async def enable_ai_for_visitor(
     logger.info("AI enabled for visitor %s by user %s", str(visitor.id), current_user.username)
     await notify_visitor_profile_updated(db, visitor)
     response = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(response, visitor.platform)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
     set_visitor_display_nickname(response, user_language)
     return response
@@ -1232,6 +1268,7 @@ async def disable_ai_for_visitor(
     logger.info("AI disabled for visitor %s by user %s", str(visitor.id), current_user.username)
     await notify_visitor_profile_updated(db, visitor)
     response = VisitorResponse.model_validate(visitor)
+    populate_visitor_ai_settings(response, visitor.platform)
     localize_visitor_response_intent(response, request.headers.get("Accept-Language"))
     set_visitor_display_nickname(response, user_language)
     return response

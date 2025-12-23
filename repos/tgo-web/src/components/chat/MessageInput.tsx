@@ -232,7 +232,15 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const assignedStaffId = visitorExtra?.assigned_staff_id;
   const isQueued = serviceStatus === 'queued' || serviceStatus === 'new';
   const isClosed = serviceStatus === 'closed';
-  const isAIDisabled = visitorExtra?.ai_disabled ?? false;
+  
+  // AI status logic:
+  // 1. If ai_disabled is not set (null/undefined), use ai_mode (auto -> ON, others -> OFF)
+  // 2. If ai_disabled is set, use its value (!ai_disabled -> ON)
+  const aiDisabledRaw = visitorExtra?.ai_disabled;
+  const aiMode = visitorExtra?.ai_settings?.ai_mode ?? 'auto';
+  const isAIEnabled = (aiDisabledRaw === null || aiDisabledRaw === undefined) 
+    ? (aiMode === 'auto') 
+    : !aiDisabledRaw;
   
   // 获取分配坐席的频道信息（用于显示坐席名字）
   const assignedStaffChannelId = assignedStaffId ? `${assignedStaffId}-staff` : undefined;
@@ -240,7 +248,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     assignedStaffChannelId ? state.getChannel(assignedStaffChannelId, 1) : undefined
   );
   const assignedStaffName = assignedStaffChannelInfo?.name;
-  const isAIEnabled = !isAIDisabled;
+  
   // agent/team 会话时不禁用手动输入
   const isManualDisabled = isAIChat ? false : isAIEnabled;
   // 流消息进行中时不禁用输入框，但发送按钮会变成暂停按钮

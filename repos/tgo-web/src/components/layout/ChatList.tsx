@@ -935,6 +935,7 @@ const ChatListComponent: React.FC<ChatListProps> = ({
         created_at: v.created_at,
         updated_at: v.updated_at,
         ai_disabled: v.ai_disabled ?? undefined,
+        ai_settings: (v as any).ai_settings,
         tags: v.tags as any,
       };
 

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import type { Platform, PlatformConfig } from '@/types';
+import PlatformAISettings from '@/components/platforms/PlatformAISettings';
+import type { Platform, PlatformConfig, PlatformAIMode } from '@/types';
 import { usePlatformStore } from '@/stores/platformStore';
 import { useAppSettingsStore } from '@/stores/appSettingsStore';
 import { useToast } from '@/hooks/useToast';
@@ -200,7 +201,29 @@ const WebsitePlatformConfig: React.FC<WebsitePlatformConfigProps> = ({ platform 
   const [platformName, setPlatformName] = useState<string>(platform.name);
   useEffect(() => { setPlatformName(platform.name); }, [platform.name]);
   const hasNameChanged = useMemo(() => platformName.trim() !== platform.name, [platformName, platform.name]);
-  const canSave = hasConfigChanges || hasNameChanged;
+
+  // AI Settings state
+  const [aiAgentIds, setAiAgentIds] = useState<string[]>(platform.agent_ids ?? []);
+  const [aiMode, setAiMode] = useState<PlatformAIMode>(platform.ai_mode ?? 'auto');
+  const [fallbackTimeout, setFallbackTimeout] = useState<number | null>(platform.fallback_to_ai_timeout ?? null);
+
+  useEffect(() => {
+    setAiAgentIds(platform.agent_ids ?? []);
+    setAiMode(platform.ai_mode ?? 'auto');
+    setFallbackTimeout(platform.fallback_to_ai_timeout ?? null);
+  }, [platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
+  const hasAISettingsChanged = useMemo(() => {
+    const origAgentIds = platform.agent_ids ?? [];
+    const origMode = platform.ai_mode ?? 'auto';
+    const origTimeout = platform.fallback_to_ai_timeout ?? null;
+    const agentIdsChanged = JSON.stringify(aiAgentIds.sort()) !== JSON.stringify([...origAgentIds].sort());
+    const modeChanged = aiMode !== origMode;
+    const timeoutChanged = fallbackTimeout !== origTimeout;
+    return agentIdsChanged || modeChanged || timeoutChanged;
+  }, [aiAgentIds, aiMode, fallbackTimeout, platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
+  const canSave = hasConfigChanges || hasNameChanged || hasAISettingsChanged;
 
 
   // Ensure platform details (incl. apiKey) are fresh
@@ -345,6 +368,8 @@ const WebsitePlatformConfig: React.FC<WebsitePlatformConfigProps> = ({ platform 
 
   const handleSave = async () => {
     try {
+      const updates: Partial<Platform> = {};
+
       if (hasConfigChanges) {
         // Build full config object from current form state (camelCase)
         const fullCamelConfig = {
@@ -356,14 +381,22 @@ const WebsitePlatformConfig: React.FC<WebsitePlatformConfigProps> = ({ platform 
         };
 
         // Transform keys to snake_case for backend API
-        const snakeConfig = keysToSnake(fullCamelConfig);
-
-        await updatePlatform(platform.id, { config: snakeConfig });
-        // Clear pending local camelCase changes since we sent transformed full payload
-        resetPlatformConfig(platform.id);
+        updates.config = keysToSnake(fullCamelConfig);
       }
       if (hasNameChanged) {
-        await updatePlatform(platform.id, { name: platformName.trim() });
+        updates.name = platformName.trim();
+      }
+      if (hasAISettingsChanged) {
+        updates.agent_ids = aiAgentIds.length > 0 ? aiAgentIds : null;
+        updates.ai_mode = aiMode;
+        updates.fallback_to_ai_timeout = aiMode === 'assist' ? fallbackTimeout : null;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await updatePlatform(platform.id, updates);
+        if (hasConfigChanges) {
+          resetPlatformConfig(platform.id);
+        }
       }
       showSuccess(showToast, t('platforms.website.messages.saveSuccess', '保存成功'), t('platforms.website.messages.saveSuccessMessage', '平台信息已更新'));
     } catch (e) {
@@ -623,7 +656,16 @@ const WebsitePlatformConfig: React.FC<WebsitePlatformConfigProps> = ({ platform 
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('platforms.website.form.apiKeyHint', '用于网站集成脚本的鉴权标识，请妥善保管。')}</p>
           </div>
 
-
+          {/* AI Settings */}
+          <PlatformAISettings
+            platform={platform}
+            agentIds={aiAgentIds}
+            aiMode={aiMode}
+            fallbackTimeout={fallbackTimeout}
+            onAgentIdsChange={setAiAgentIds}
+            onAIModeChange={setAiMode}
+            onFallbackTimeoutChange={setFallbackTimeout}
+          />
 
         </section>
 

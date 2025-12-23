@@ -5,7 +5,7 @@ from enum import Enum
 from typing import List, Optional, TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship, foreign
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -137,13 +137,46 @@ class Visitor(Base):
     # Activity tracking
     first_visit_time: Mapped[datetime] = mapped_column(
         nullable=False,
-        default=func.now(),
+        default=datetime.utcnow,
+        server_default=func.now(),
         comment="When the visitor first accessed the system"
     )
     last_visit_time: Mapped[datetime] = mapped_column(
         nullable=False,
-        default=func.now(),
+        default=datetime.utcnow,
+        server_default=func.now(),
         comment="Visitor most recent activity/visit time"
+    )
+    last_message_at: Mapped[Optional[datetime]] = mapped_column(
+        nullable=True,
+        comment="Time of the last message in the channel"
+    )
+    visitor_send_count: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        comment="Total number of messages sent by the visitor"
+    )
+    last_message_seq: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        comment="Sequence number of the last message in the channel"
+    )
+    last_client_msg_no: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Client message number of the last message in the channel"
+    )
+    is_last_message_from_visitor: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether the last message in the channel was sent by the visitor"
+    )
+    is_last_message_from_ai: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether the last message in the channel was sent by an AI"
     )
     last_offline_time: Mapped[Optional[datetime]] = mapped_column(
         nullable=True,
@@ -158,8 +191,15 @@ class Visitor(Base):
     ai_disabled: Mapped[Optional[bool]] = mapped_column(
         Boolean,
         nullable=True,
-        default=False,
+        default=None,
         comment="Whether AI responses are disabled for this visitor"
+    )
+    ai_fallback_retry_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="Number of failed AI fallback attempts"
     )
     
     # Locale and network info

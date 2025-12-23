@@ -792,7 +792,7 @@
     "mcpTools": "MCP Tools",
     "visitors": "Visitors",
     "knowledge": "Knowledge Base",
-    "channels": "Channel Management",
+    "channels": "Platform Management",
     "settings": "Settings"
   },
   "ai": {
@@ -1163,7 +1163,7 @@
     }
   },
   "channels": {
-    "title": "Channel Management",
+    "title": "Platform Management",
     "custom": "Custom Platform",
     "config": "Configuration",
     "status": "Status",
@@ -2467,6 +2467,28 @@
         "responseRequirementDesc": "Please ensure the callback URL is publicly accessible and returns HTTP 200 status code to indicate successful receipt.",
         "codeExamples": "Code Examples"
       }
+    },
+    "aiSettings": {
+      "title": "AI Settings",
+      "optional": "Optional",
+      "agents": "AI Agents",
+      "loadingAgents": "Loading...",
+      "selectAgents": "Select AI Agents",
+      "noAgents": "No AI Agents Available",
+      "agentsHint": "Select AI agents assigned to this platform. Multiple selection supported.",
+      "agentsHintDefault": "If none selected, all AI agents will be used by default.",
+      "mode": "AI Mode",
+      "modeAuto": "Auto",
+      "modeAssist": "Assist",
+      "modeOff": "Off",
+      "modeAutoHint": "AI automatically handles all messages.",
+      "modeAssistHint": "Human first, AI takes over after timeout.",
+      "modeOffHint": "Disable AI, only human handles messages.",
+      "timeout": "Timeout (seconds)",
+      "timeoutPlaceholder": "e.g., 60",
+      "timeoutHint": "Time in seconds before AI takes over when there's no reply. Set to 0 to prevent AI takeover.",
+      "saveSuccess": "AI settings saved",
+      "saveButton": "Save AI Settings"
     }
   },
   "setup": {

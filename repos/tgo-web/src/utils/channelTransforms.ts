@@ -41,6 +41,8 @@ export function visitorToChannelInfo(
       last_visit_time: (visitor as any).last_visit_time ?? undefined,
       last_offline_time: (visitor as any).last_offline_time ?? undefined,
       is_online: visitor.is_online,
+      ai_disabled: visitor.ai_disabled,
+      ai_settings: visitor.ai_settings,
       ai_insights: (visitor as any).ai_insights ?? null,
       tags: Array.isArray(visitor.tags)
         ? visitor.tags.map((t: any) => ({

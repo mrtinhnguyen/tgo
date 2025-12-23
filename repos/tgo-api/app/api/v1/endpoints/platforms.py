@@ -282,6 +282,9 @@ async def create_platform(
         api_key=generate_api_key(),
         config=platform_data.config,
         is_active=platform_data.is_active,
+        agent_ids=platform_data.agent_ids,
+        ai_mode=platform_data.ai_mode.value if platform_data.ai_mode else None,
+        fallback_to_ai_timeout=platform_data.fallback_to_ai_timeout,
     )
 
     db.add(platform)
@@ -535,7 +538,7 @@ async def enable_ai_for_platform(
     current_user: Staff = Depends(require_permission("platforms:update")),
     x_user_language: str = Header("zh", alias="X-User-Language"),
 ) -> PlatformResponse:
-    """Enable AI for a platform (set ai_disabled=False). Requires platforms:update permission."""
+    """Enable AI for a platform (set ai_mode=auto). Requires platforms:update permission."""
     logger.info("User %s enabling AI for platform %s", current_user.username, str(platform_id))
 
     platform = (
@@ -551,12 +554,12 @@ async def enable_ai_for_platform(
     if not platform:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Platform not found")
 
-    platform.ai_disabled = False
+    platform.ai_mode = "auto"
     platform.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(platform)
 
-    logger.info("Platform %s AI enabled by user %s", str(platform.id), current_user.username)
+    logger.info("Platform %s AI enabled (ai_mode=auto) by user %s", str(platform.id), current_user.username)
     return _build_platform_response(platform, language=x_user_language)
 
 
@@ -567,7 +570,7 @@ async def disable_ai_for_platform(
     current_user: Staff = Depends(require_permission("platforms:update")),
     x_user_language: str = Header("zh", alias="X-User-Language"),
 ) -> PlatformResponse:
-    """Disable AI for a platform (set ai_disabled=True). Requires platforms:update permission."""
+    """Disable AI for a platform (set ai_mode=off). Requires platforms:update permission."""
     logger.info("User %s disabling AI for platform %s", current_user.username, str(platform_id))
 
     platform = (
@@ -583,12 +586,12 @@ async def disable_ai_for_platform(
     if not platform:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Platform not found")
 
-    platform.ai_disabled = True
+    platform.ai_mode = "off"
     platform.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(platform)
 
-    logger.info("Platform %s AI disabled by user %s", str(platform.id), current_user.username)
+    logger.info("Platform %s AI disabled (ai_mode=off) by user %s", str(platform.id), current_user.username)
     return _build_platform_response(platform, language=x_user_language)
 
 

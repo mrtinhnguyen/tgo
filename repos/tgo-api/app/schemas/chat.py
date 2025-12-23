@@ -2,8 +2,9 @@
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Literal
+from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.base import BaseSchema
 
@@ -36,6 +37,107 @@ class ChatFileUploadResponse(BaseSchema):
     channel_type: int = Field(..., description="Channel type code")
     uploaded_at: datetime = Field(..., description="Upload timestamp")
     uploaded_by: Optional[str] = Field(None, description="Staff username or 'visitor'")
+
+
+class ChatCompletionRequest(BaseSchema):
+    """流式聊天请求参数。"""
+
+    api_key: str = Field(
+        ...,
+        description="平台 API Key，用于验证请求来源",
+        examples=["pk_live_xxxxxxxxxxxx"]
+    )
+    message: str = Field(
+        ...,
+        description="用户发送的消息内容",
+        examples=["你好，请问有什么可以帮助您的？"]
+    )
+    from_uid: str = Field(
+        ...,
+        description="平台用户唯一标识，用于识别访客身份",
+        examples=["user_12345", "wx_openid_xxx"]
+    )
+    extra: Optional[Dict[str, Any]] = Field(
+        None,
+        description="额外数据，会随消息一起转发到 WuKongIM",
+        examples=[{"source": "web", "page": "/product/123"}]
+    )
+    forward_user_message_to_wukongim: bool = Field(
+        default=True,
+        description="是否将用户消息同时转发一份到 WuKongIM（默认开启）",
+        examples=[True],
+    )
+    timeout_seconds: Optional[int] = Field(
+        120,
+        ge=10,
+        le=300,
+        description="SSE 流超时时间（秒），默认120秒，范围10-300"
+    )
+    channel_id: Optional[str] = Field(
+        None,
+        description="自定义频道ID，不填则自动生成（格式: {visitor_id}-vtr 的编码形式）"
+    )
+    channel_type: Optional[int] = Field(
+        None,
+        description="频道类型，默认251（客服频道）"
+    )
+    system_message: Optional[str] = Field(
+        None,
+        description="AI系统提示词，用于指导AI的回复风格和行为",
+        examples=["你是一个专业的客服助手，请用简洁友好的语气回复用户问题。"]
+    )
+    expected_output: Optional[str] = Field(
+        None,
+        description="期望的输出格式描述，帮助AI生成符合要求的响应",
+        examples=["请用JSON格式回复，包含answer和confidence字段"]
+    )
+    wukongim_only: bool = Field(
+        False,
+        description="是否仅发送到WuKongIM而不返回流响应给客户端。设为true时，接口会立即返回accepted事件，AI处理在后台进行"
+    )
+    stream: Optional[bool] = Field(
+        True,
+        description="是否使用流式响应。true（默认）返回SSE流，false返回完整JSON响应"
+    )
+
+
+class StaffTeamChatRequest(BaseSchema):
+    """Request payload for staff-to-team/agent chat.
+
+    Notes:
+    - Either team_id or agent_id must be provided (exactly one)
+    - If team_id is provided, channel_id will be {team_id}-team
+    - If agent_id is provided, channel_id will be {agent_id}-agent
+    - Response is delivered via WuKongIM
+    """
+    team_id: Optional[UUID] = Field(None, description="AI Team ID to chat with")
+    agent_id: Optional[UUID] = Field(None, description="AI Agent ID to chat with")
+    message: str = Field(..., description="Message content to send")
+    system_message: Optional[str] = Field(
+        None, description="System message/prompt to guide the AI"
+    )
+    expected_output: Optional[str] = Field(
+        None, description="Expected output format or description for the AI"
+    )
+    timeout_seconds: Optional[int] = Field(
+        120, ge=1, le=600, description="Timeout in seconds for AI response"
+    )
+
+    @model_validator(mode="after")
+    def validate_team_or_agent(self) -> "StaffTeamChatRequest":
+        """Ensure exactly one of team_id or agent_id is provided."""
+        if self.team_id is None and self.agent_id is None:
+            raise ValueError("Either team_id or agent_id must be provided")
+        if self.team_id is not None and self.agent_id is not None:
+            raise ValueError("Only one of team_id or agent_id should be provided, not both")
+        return self
+
+
+class StaffTeamChatResponse(BaseSchema):
+    """Response payload for staff-to-team/agent chat."""
+    success: bool = Field(..., description="Whether the chat completed successfully")
+    message: str = Field(..., description="Status message")
+    client_msg_no: str = Field(..., description="Message correlation ID for tracking")
 
 
 # OpenAI-compatible Chat Completion schemas

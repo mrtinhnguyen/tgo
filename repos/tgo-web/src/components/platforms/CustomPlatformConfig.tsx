@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FiCopy, FiEye, FiEyeOff, FiRefreshCw } from 'react-icons/fi';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import type { Platform } from '@/types';
+import PlatformAISettings from '@/components/platforms/PlatformAISettings';
+import type { Platform, PlatformAIMode } from '@/types';
 import { usePlatformStore } from '@/stores/platformStore';
 import { useToast } from '@/hooks/useToast';
 import { showApiError, showSuccess } from '@/utils/toastHelpers';
@@ -31,6 +32,27 @@ const CustomPlatformConfig: React.FC<Props> = ({ platform }) => {
   useEffect(() => { setPlatformName(platform.name); }, [platform.name]);
   const hasNameChanged = useMemo(() => platformName.trim() !== platform.name, [platformName, platform.name]);
 
+  // AI Settings state
+  const [aiAgentIds, setAiAgentIds] = useState<string[]>(platform.agent_ids ?? []);
+  const [aiMode, setAiMode] = useState<PlatformAIMode>(platform.ai_mode ?? 'auto');
+  const [fallbackTimeout, setFallbackTimeout] = useState<number | null>(platform.fallback_to_ai_timeout ?? null);
+
+  useEffect(() => {
+    setAiAgentIds(platform.agent_ids ?? []);
+    setAiMode(platform.ai_mode ?? 'auto');
+    setFallbackTimeout(platform.fallback_to_ai_timeout ?? null);
+  }, [platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
+  const hasAISettingsChanged = useMemo(() => {
+    const origAgentIds = platform.agent_ids ?? [];
+    const origMode = platform.ai_mode ?? 'auto';
+    const origTimeout = platform.fallback_to_ai_timeout ?? null;
+    const agentIdsChanged = JSON.stringify(aiAgentIds.sort()) !== JSON.stringify([...origAgentIds].sort());
+    const modeChanged = aiMode !== origMode;
+    const timeoutChanged = fallbackTimeout !== origTimeout;
+    return agentIdsChanged || modeChanged || timeoutChanged;
+  }, [aiAgentIds, aiMode, fallbackTimeout, platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
   // Callback URL state - initialize from platform.config.callback_url (convert relative to absolute)
   const [callbackUrl, setCallbackUrl] = useState<string>('');
   useEffect(() => {
@@ -42,7 +64,7 @@ const CustomPlatformConfig: React.FC<Props> = ({ platform }) => {
     return callbackUrl.trim() !== originalCallback;
   }, [callbackUrl, platform.config]);
 
-  const canSave = hasNameChanged || hasCallbackChanged;
+  const canSave = hasNameChanged || hasCallbackChanged || hasAISettingsChanged;
 
   const [showApiKey, setShowApiKey] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -78,7 +100,7 @@ const CustomPlatformConfig: React.FC<Props> = ({ platform }) => {
       }
 
       // Build update payload
-      const updatePayload: any = {};
+      const updatePayload: Partial<Platform> = {};
 
       if (hasNameChanged) {
         updatePayload.name = platformName.trim();
@@ -88,6 +110,12 @@ const CustomPlatformConfig: React.FC<Props> = ({ platform }) => {
         updatePayload.config = {
           callback_url: callbackUrl.trim() || undefined
         };
+      }
+
+      if (hasAISettingsChanged) {
+        updatePayload.agent_ids = aiAgentIds.length > 0 ? aiAgentIds : null;
+        updatePayload.ai_mode = aiMode;
+        updatePayload.fallback_to_ai_timeout = aiMode === 'assist' ? fallbackTimeout : null;
       }
 
       await updatePlatform(platform.id, updatePayload);
@@ -286,6 +314,17 @@ const CustomPlatformConfig: React.FC<Props> = ({ platform }) => {
               </button>
             </div>
           </div>
+
+          {/* AI Settings */}
+          <PlatformAISettings
+            platform={platform}
+            agentIds={aiAgentIds}
+            aiMode={aiMode}
+            fallbackTimeout={fallbackTimeout}
+            onAgentIdsChange={setAiAgentIds}
+            onAIModeChange={setAiMode}
+            onFallbackTimeoutChange={setFallbackTimeout}
+          />
         </section>
 
         {/* Right: Integration Guide */}

@@ -30,7 +30,7 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
   {
     id: 'channels',
     title: 'navigation.channels',
-    icon: 'Share2',
+    icon: 'Platform',
     path: '/platforms'
   },
   {

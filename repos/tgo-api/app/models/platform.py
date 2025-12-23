@@ -9,8 +9,8 @@ if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.visitor import Visitor
 
-from sqlalchemy import Boolean, ForeignKey, String, Text, func, event, inspect as sa_inspect
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, func, event, inspect as sa_inspect
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship, foreign
 
 from app.core.database import Base
@@ -111,6 +111,13 @@ class PlatformSyncStatus(str, Enum):
     FAILED = "failed"
 
 
+class PlatformAIMode(str, Enum):
+    """Platform AI mode enumeration."""
+    AUTO = "auto"           # 自动：AI 自动处理所有消息
+    ASSIST = "assist"       # 辅助：人工优先，超时后 AI 接管
+    OFF = "off"             # 关闭：AI 不处理消息
+
+
 class Platform(Base):
     """Platform model for communication platforms."""
 
@@ -153,11 +160,23 @@ class Platform(Base):
         default=True,
         comment="Whether platform is active"
     )
-    ai_disabled: Mapped[Optional[bool]] = mapped_column(
-        Boolean,
+    # AI configuration
+    agent_ids: Mapped[Optional[List[UUID]]] = mapped_column(
+        ARRAY(PG_UUID(as_uuid=True)),
         nullable=True,
-        default=False,
-        comment="Whether AI responses are disabled for this platform"
+        comment="List of AI Agent IDs assigned to this platform"
+    )
+    ai_mode: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        default=PlatformAIMode.AUTO.value,
+        comment="AI mode: auto (AI handles all), assist (human first, AI fallback), off (AI disabled)"
+    )
+    fallback_to_ai_timeout: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        default=0,
+        comment="Timeout in seconds before AI takes over when ai_mode=assist. 0 means AI never takes over."
     )
 
     # Website usage tracking

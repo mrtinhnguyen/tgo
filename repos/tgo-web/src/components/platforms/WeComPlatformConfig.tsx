@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import type { Platform, PlatformConfig } from '@/types';
+import PlatformAISettings from '@/components/platforms/PlatformAISettings';
+import type { Platform, PlatformConfig, PlatformAIMode } from '@/types';
 import { usePlatformStore } from '@/stores/platformStore';
 import { useToast } from '@/hooks/useToast';
 import { showApiError, showSuccess } from '@/utils/toastHelpers';
@@ -34,7 +35,29 @@ const WeComPlatformConfig: React.FC<Props> = ({ platform }) => {
   const [platformName, setPlatformName] = useState<string>(platform.name);
   useEffect(() => { setPlatformName(platform.name); }, [platform.name]);
   const hasNameChanged = useMemo(() => platformName.trim() !== platform.name, [platformName, platform.name]);
-  const canSave = hasConfigChanges || hasNameChanged;
+
+  // AI Settings state
+  const [aiAgentIds, setAiAgentIds] = useState<string[]>(platform.agent_ids ?? []);
+  const [aiMode, setAiMode] = useState<PlatformAIMode>(platform.ai_mode ?? 'auto');
+  const [fallbackTimeout, setFallbackTimeout] = useState<number | null>(platform.fallback_to_ai_timeout ?? null);
+
+  useEffect(() => {
+    setAiAgentIds(platform.agent_ids ?? []);
+    setAiMode(platform.ai_mode ?? 'auto');
+    setFallbackTimeout(platform.fallback_to_ai_timeout ?? null);
+  }, [platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
+  const hasAISettingsChanged = useMemo(() => {
+    const origAgentIds = platform.agent_ids ?? [];
+    const origMode = platform.ai_mode ?? 'auto';
+    const origTimeout = platform.fallback_to_ai_timeout ?? null;
+    const agentIdsChanged = JSON.stringify(aiAgentIds.sort()) !== JSON.stringify([...origAgentIds].sort());
+    const modeChanged = aiMode !== origMode;
+    const timeoutChanged = fallbackTimeout !== origTimeout;
+    return agentIdsChanged || modeChanged || timeoutChanged;
+  }, [aiAgentIds, aiMode, fallbackTimeout, platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
+  const canSave = hasConfigChanges || hasNameChanged || hasAISettingsChanged;
 
   // Local form state sourced from platform.config
   const [formValues, setFormValues] = useState(() => ({
@@ -77,6 +100,8 @@ const WeComPlatformConfig: React.FC<Props> = ({ platform }) => {
 
   const handleSave = async () => {
     try {
+      const updates: Partial<Platform> = {};
+
       if (hasConfigChanges) {
         // Transform camelCase form values to snake_case API payload for WeCom
         const snakeConfig: Record<string, any> = {
@@ -89,16 +114,24 @@ const WeComPlatformConfig: React.FC<Props> = ({ platform }) => {
         if (aes) {
           snakeConfig.encoding_aes_key = aes;
         } else {
-          // optional: backend accepts undefined or null
           snakeConfig.encoding_aes_key = null;
         }
-
-        await updatePlatform(platform.id, { config: snakeConfig });
-        // Clear pending local camelCase changes since we sent transformed payload
-        resetPlatformConfig(platform.id);
+        updates.config = snakeConfig;
       }
       if (hasNameChanged) {
-        await updatePlatform(platform.id, { name: platformName.trim() });
+        updates.name = platformName.trim();
+      }
+      if (hasAISettingsChanged) {
+        updates.agent_ids = aiAgentIds.length > 0 ? aiAgentIds : null;
+        updates.ai_mode = aiMode;
+        updates.fallback_to_ai_timeout = aiMode === 'assist' ? fallbackTimeout : null;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await updatePlatform(platform.id, updates);
+        if (hasConfigChanges) {
+          resetPlatformConfig(platform.id);
+        }
       }
       showSuccess(showToast, t('platforms.wecom.messages.saveSuccess', '保存成功'), t('platforms.wecom.messages.saveSuccessMessage', '企业微信平台配置已更新'));
     } catch (e) {
@@ -276,6 +309,17 @@ const WeComPlatformConfig: React.FC<Props> = ({ platform }) => {
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('platforms.wecom.form.callbackUrlHint', '将此 URL 配置到企业微信「服务器配置」中的回调地址。')}</p>
           </div>
+
+          {/* AI Settings */}
+          <PlatformAISettings
+            platform={platform}
+            agentIds={aiAgentIds}
+            aiMode={aiMode}
+            fallbackTimeout={fallbackTimeout}
+            onAgentIdsChange={setAiAgentIds}
+            onAIModeChange={setAiMode}
+            onFallbackTimeoutChange={setFallbackTimeout}
+          />
         </section>
 
         {/* Right: comprehensive guide */}

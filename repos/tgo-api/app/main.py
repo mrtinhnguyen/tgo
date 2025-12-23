@@ -190,6 +190,14 @@ async def startup_event():
         # best-effort; don't block startup
         pass
 
+    # Start periodic auto AI fallback task (best-effort)
+    try:
+        from app.tasks.auto_fallback_to_ai import start_auto_fallback_to_ai_task
+        await start_auto_fallback_to_ai_task()
+    except Exception:
+        # best-effort; don't block startup
+        pass
+
     # Server ready
     startup_log("🌐 Server starting...")
     startup_log(f"   📍 Listening on: http://0.0.0.0:8000")
@@ -235,6 +243,13 @@ async def shutdown_event():
     try:
         from app.tasks.sync_visitor_online_status import stop_visitor_online_sync_task
         await stop_visitor_online_sync_task()
+    except Exception:
+        pass
+
+    # Stop periodic auto AI fallback task (best-effort)
+    try:
+        from app.tasks.auto_fallback_to_ai import stop_auto_fallback_to_ai_task
+        await stop_auto_fallback_to_ai_task()
     except Exception:
         pass
 

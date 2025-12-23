@@ -1,11 +1,11 @@
 """Platform schemas."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import Field, computed_field
 
-from app.models.platform import PlatformType
+from app.models.platform import PlatformType, PlatformAIMode
 from app.schemas.base import BaseSchema, PaginatedResponse, SoftDeleteMixin, TimestampMixin
 from app.core.config import settings
 
@@ -29,6 +29,26 @@ class PlatformBase(BaseSchema):
         default=True,
         description="Whether the platform is active"
     )
+    agent_ids: Optional[List[UUID]] = Field(
+        None,
+        description="List of AI Agent IDs assigned to this platform"
+    )
+    ai_mode: Optional[PlatformAIMode] = Field(
+        default=PlatformAIMode.AUTO,
+        description="AI mode: auto (AI handles all), assist (human first, AI fallback), off (AI disabled)"
+    )
+    fallback_to_ai_timeout: Optional[int] = Field(
+        default=0,
+        ge=0,
+        description="Timeout in seconds before AI takes over when ai_mode=assist. 0 means AI never takes over."
+    )
+
+
+class PlatformAISettings(BaseSchema):
+    """AI configuration settings for a platform."""
+    ai_mode: Optional[PlatformAIMode] = Field(None, description="AI mode: auto, assist, or off")
+    agent_ids: Optional[List[UUID]] = Field(None, description="List of AI Agent IDs assigned to this platform")
+    fallback_to_ai_timeout: Optional[int] = Field(None, description="Timeout in seconds before AI takes over when ai_mode=assist")
 
 
 class PlatformCreate(PlatformBase):
@@ -57,9 +77,18 @@ class PlatformUpdate(BaseSchema):
         None,
         description="Updated platform active status"
     )
-    ai_disabled: Optional[bool] = Field(
+    agent_ids: Optional[List[UUID]] = Field(
         None,
-        description="Whether AI responses are disabled for this platform"
+        description="List of AI Agent IDs assigned to this platform"
+    )
+    ai_mode: Optional[PlatformAIMode] = Field(
+        None,
+        description="AI mode: auto (AI handles all), assist (human first, AI fallback), off (AI disabled)"
+    )
+    fallback_to_ai_timeout: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Timeout in seconds before AI takes over when ai_mode=assist. 0 means AI never takes over."
     )
 
 
@@ -87,9 +116,11 @@ class PlatformListItemResponse(BaseSchema, TimestampMixin, SoftDeleteMixin):
     type: PlatformType = Field(..., description="Platform type")
     is_active: bool = Field(..., description="Whether the platform is active")
     icon: Optional[str] = Field(None, description="SVG icon markup for the platform type")
-    ai_disabled: Optional[bool] = Field(None, description="Whether AI responses are disabled for this platform")
     is_supported: Optional[bool] = Field(None, description="Whether this platform type is currently supported")
     name_en: Optional[str] = Field(None, description="English name of the platform type")
+    agent_ids: Optional[List[UUID]] = Field(None, description="List of AI Agent IDs assigned to this platform")
+    ai_mode: Optional[PlatformAIMode] = Field(None, description="AI mode: auto, assist, or off")
+    fallback_to_ai_timeout: Optional[int] = Field(None, description="Timeout in seconds before AI takes over when ai_mode=assist")
 
     @computed_field  # type: ignore[misc]
     @property
@@ -123,7 +154,6 @@ class PlatformListItemResponse(BaseSchema, TimestampMixin, SoftDeleteMixin):
 class PlatformResponse(PlatformInDB):
     """Schema for platform detail response (with all fields including sensitive data)."""
     icon: Optional[str] = Field(None, description="SVG icon markup for the platform type")
-    ai_disabled: Optional[bool] = Field(None, description="Whether AI responses are disabled for this platform")
     is_supported: Optional[bool] = Field(None, description="Whether this platform type is currently supported")
     name_en: Optional[str] = Field(None, description="English name of the platform type")
     display_name: str = Field("", description="Display name with fallback to platform type name")

@@ -658,7 +658,7 @@ class WuKongIMClient:
         channel_id: str,
         channel_type: int,
         login_uid: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[WuKongIMChannelLastMessage]:
         """Get the last message of a channel.
 
         Args:
@@ -667,7 +667,7 @@ class WuKongIMClient:
             login_uid: Login user ID (required for personal channels, channel_type=1)
 
         Returns:
-            Last message info or None if channel not found or no messages
+            WuKongIMChannelLastMessage or None if channel not found or no messages
         """
         if not self.enabled:
             logger.debug("WuKongIM integration is disabled; skipping get_channel_last_message")
@@ -689,11 +689,77 @@ class WuKongIMClient:
         )
 
         try:
-            response = await self._request("GET", "/channel/last_message", params=params)
-            return response
+            response = await self._make_request("GET", "/channel/last_message", params=params)
+            
+            if not response:
+                return None
+            
+            # Decode payload if present
+            if "payload" in response and isinstance(response["payload"], str):
+                response["payload"] = self._decode_message_payload(response["payload"])
+            
+            return WuKongIMChannelLastMessage(**response)
         except Exception as e:
             # 404 means no messages, return None
             logger.debug(f"Failed to get channel last message: {e}")
+            return None
+
+    async def get_message_by_client_msg_no(
+        self,
+        *,
+        channel_id: str,
+        channel_type: int,
+        client_msg_no: str,
+    ) -> Optional[WuKongIMMessage]:
+        """Get a message by client_msg_no via POST /message.
+
+        Args:
+            channel_id: Channel ID
+            channel_type: Channel type
+            client_msg_no: The client message number to search for
+
+        Returns:
+            WuKongIMMessage with decoded payload, or None if not found
+        """
+        if not self.enabled:
+            logger.debug("WuKongIM integration is disabled; skipping get_message_by_client_msg_no")
+            return None
+
+        if not client_msg_no:
+            return None
+
+        request_data = {
+            "channel_id": channel_id,
+            "channel_type": channel_type,
+            "client_msg_no": client_msg_no
+        }
+
+        logger.info(
+            "Getting message by client_msg_no",
+            extra={
+                "channel_id": channel_id,
+                "channel_type": channel_type,
+                "client_msg_no": client_msg_no
+            }
+        )
+
+        try:
+            response = await self._make_request(
+                method="GET",
+                endpoint="/message/byclientmsgno",
+                params=request_data,
+            )
+
+            if not response:
+                return None
+
+            # Decode payload if present
+            if "payload" in response and isinstance(response["payload"], str):
+                response["payload"] = self._decode_message_payload(response["payload"])
+
+            return WuKongIMMessage(**response)
+        except Exception as e:
+            logger.error(f"Failed to get message by client_msg_no {client_msg_no}: {e}")
             return None
 
     async def create_channel(

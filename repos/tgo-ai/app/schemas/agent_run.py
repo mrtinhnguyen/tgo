@@ -44,7 +44,11 @@ class SupervisorRunRequest(BaseSchema):
     )
     agent_id: Optional[str] = Field(
         default=None,
-        description="UUID of a specific agent to use. If set, the team will only contain this agent",
+        description="UUID of a specific agent to use. If set, the team will only contain this agent. Deprecated: use agent_ids instead.",
+    )
+    agent_ids: Optional[List[str]] = Field(
+        default=None,
+        description="List of agent UUIDs to use. If set, the team will only contain these agents. Takes precedence over agent_id.",
     )
     message: str = Field(
         description="User message to be processed by the agents",

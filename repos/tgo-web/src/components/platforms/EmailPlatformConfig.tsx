@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import type { Platform, PlatformConfig } from '@/types';
+import PlatformAISettings from '@/components/platforms/PlatformAISettings';
+import type { Platform, PlatformConfig, PlatformAIMode } from '@/types';
 import { usePlatformStore } from '@/stores/platformStore';
 import { useToast } from '@/hooks/useToast';
 import { showApiError, showSuccess } from '@/utils/toastHelpers';
@@ -161,7 +162,29 @@ const EmailPlatformConfig: React.FC<Props> = ({ platform }) => {
   const [platformName, setPlatformName] = useState<string>(platform.name);
   useEffect(() => { setPlatformName(platform.name); }, [platform.name]);
   const hasNameChanged = useMemo(() => platformName.trim() !== platform.name, [platformName, platform.name]);
-  const canSave = hasConfigChanges || hasNameChanged;
+
+  // AI Settings state
+  const [aiAgentIds, setAiAgentIds] = useState<string[]>(platform.agent_ids ?? []);
+  const [aiMode, setAiMode] = useState<PlatformAIMode>(platform.ai_mode ?? 'auto');
+  const [fallbackTimeout, setFallbackTimeout] = useState<number | null>(platform.fallback_to_ai_timeout ?? null);
+
+  useEffect(() => {
+    setAiAgentIds(platform.agent_ids ?? []);
+    setAiMode(platform.ai_mode ?? 'auto');
+    setFallbackTimeout(platform.fallback_to_ai_timeout ?? null);
+  }, [platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
+  const hasAISettingsChanged = useMemo(() => {
+    const origAgentIds = platform.agent_ids ?? [];
+    const origMode = platform.ai_mode ?? 'auto';
+    const origTimeout = platform.fallback_to_ai_timeout ?? null;
+    const agentIdsChanged = JSON.stringify(aiAgentIds.sort()) !== JSON.stringify([...origAgentIds].sort());
+    const modeChanged = aiMode !== origMode;
+    const timeoutChanged = fallbackTimeout !== origTimeout;
+    return agentIdsChanged || modeChanged || timeoutChanged;
+  }, [aiAgentIds, aiMode, fallbackTimeout, platform.agent_ids, platform.ai_mode, platform.fallback_to_ai_timeout]);
+
+  const canSave = hasConfigChanges || hasNameChanged || hasAISettingsChanged;
 
   // Local form state sourced from platform.config
   const initialFormValues: EmailConfig = useMemo(() => {
@@ -282,11 +305,22 @@ const EmailPlatformConfig: React.FC<Props> = ({ platform }) => {
 
   const handleSave = async () => {
     try {
+      const updates: Partial<Platform> = {};
+
       if (hasConfigChanges) {
         await savePlatformConfig(platform.id);
       }
       if (hasNameChanged) {
-        await updatePlatform(platform.id, { name: platformName.trim() });
+        updates.name = platformName.trim();
+      }
+      if (hasAISettingsChanged) {
+        updates.agent_ids = aiAgentIds.length > 0 ? aiAgentIds : null;
+        updates.ai_mode = aiMode;
+        updates.fallback_to_ai_timeout = aiMode === 'assist' ? fallbackTimeout : null;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await updatePlatform(platform.id, updates);
       }
       showSuccess(showToast, t('platforms.email.messages.saveSuccess', '保存成功'), t('platforms.email.messages.saveSuccessMessage', '邮件平台配置已保存'));
     } catch (e) {
@@ -492,6 +526,17 @@ const EmailPlatformConfig: React.FC<Props> = ({ platform }) => {
               <span>{showAdvanced ? t('platforms.email.form.hideAdvanced', '隐藏高级设置') : t('platforms.email.form.showAdvanced', '显示高级设置')}</span>
             </button>
           </div>
+
+          {/* AI Settings */}
+          <PlatformAISettings
+            platform={platform}
+            agentIds={aiAgentIds}
+            aiMode={aiMode}
+            fallbackTimeout={fallbackTimeout}
+            onAgentIdsChange={setAiAgentIds}
+            onAIModeChange={setAiMode}
+            onFallbackTimeoutChange={setFallbackTimeout}
+          />
 
           {/* Advanced Settings (Collapsible) */}
           {showAdvanced && (

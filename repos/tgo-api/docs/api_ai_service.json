@@ -4045,7 +4045,22 @@
               }
             ],
             "title": "Agent Id",
-            "description": "UUID of a specific agent to use. If set, the team will only contain this agent"
+            "description": "UUID of a specific agent to use. If set, the team will only contain this agent. Deprecated: use agent_ids instead."
+          },
+          "agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Ids",
+            "description": "List of agent UUIDs to use. If set, the team will only contain these agents. Takes precedence over agent_id."
           },
           "message": {
             "type": "string",

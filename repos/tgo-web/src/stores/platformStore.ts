@@ -166,6 +166,16 @@ export const usePlatformStore = create<PlatformState>()(
             if (Object.prototype.hasOwnProperty.call(updates, 'config')) {
               payload.config = updates.config as Record<string, any>;
             }
+            // AI settings fields (top-level, not nested in config)
+            if (Object.prototype.hasOwnProperty.call(updates, 'agent_ids')) {
+              payload.agent_ids = updates.agent_ids;
+            }
+            if (Object.prototype.hasOwnProperty.call(updates, 'ai_mode')) {
+              payload.ai_mode = updates.ai_mode;
+            }
+            if (Object.prototype.hasOwnProperty.call(updates, 'fallback_to_ai_timeout')) {
+              payload.fallback_to_ai_timeout = updates.fallback_to_ai_timeout;
+            }
 
             // If we are updating config OR name during a "save" operation, 
             // we should generally ensure the platform is active.
@@ -202,6 +212,10 @@ export const usePlatformStore = create<PlatformState>()(
                     config: ({ ...(p.config || {}), ...(p.api_key ? { apiKey: p.api_key } : {}) }) as PlatformConfig,
                     callback_url: (p as any).callback_url || '',
                     logo_url: (p as any).logo_url ?? null,
+                    // AI settings
+                    agent_ids: (p as any).agent_ids ?? null,
+                    ai_mode: (p as any).ai_mode ?? null,
+                    fallback_to_ai_timeout: (p as any).fallback_to_ai_timeout ?? null,
                   };
                 };
 
@@ -254,6 +268,10 @@ export const usePlatformStore = create<PlatformState>()(
               callback_url: (p as any).callback_url || '',
               logo_url: (p as any).logo_url ?? null,
               chat_url: (p as any).chat_url ?? null,
+              // AI settings
+              agent_ids: (p as any).agent_ids ?? null,
+              ai_mode: (p as any).ai_mode ?? null,
+              fallback_to_ai_timeout: (p as any).fallback_to_ai_timeout ?? null,
             };
             set({
               platforms: state.platforms.some(pp => pp.id === platformId)
@@ -584,6 +602,10 @@ export const usePlatformStore = create<PlatformState>()(
                   config: ({ ...(p.config || {}), ...(p.api_key ? { apiKey: p.api_key } : {}) }) as PlatformConfig,
                   callback_url: (p as any).callback_url || '',
                   logo_url: (p as any).logo_url ?? null,
+                  // AI settings
+                  agent_ids: (p as any).agent_ids ?? null,
+                  ai_mode: (p as any).ai_mode ?? null,
+                  fallback_to_ai_timeout: (p as any).fallback_to_ai_timeout ?? null,
                 };
               });
 

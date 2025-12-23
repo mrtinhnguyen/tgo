@@ -19,6 +19,7 @@ from app.schemas.visitor import (
     VisitorActivityResponse,
     set_visitor_display_nickname,
     resolve_visitor_display_name,
+    populate_visitor_ai_settings,
 )
 from app.schemas import TagResponse
 from app.schemas.tag import set_tag_list_display_name
@@ -159,6 +160,7 @@ def _build_enriched_visitor_payload(
             "assigned_staff_id": assigned_staff_id,
         }
     )
+    populate_visitor_ai_settings(visitor_payload, visitor.platform)
     localize_visitor_response_intent(visitor_payload, accept_language)
 
     return visitor_payload
