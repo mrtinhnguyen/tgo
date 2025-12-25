@@ -56,6 +56,12 @@ TGO 是一個開源的 AI 智能體客服平台，致力於幫助企業「組建
 - **豐富元件** - 訂單卡片、物流追蹤、商品展示、價格對比等
 - **互動協議** - 標準化的 Action URI 協議，支援連結跳轉、訊息發送、內容複製
 
+## 🏗️ 系統架構
+
+<p align="center">
+  <img src="resources/architecture.svg" width="100%" alt="TGO 系統架構圖">
+</p>
+
 ## 產品預覽
 
 | | |

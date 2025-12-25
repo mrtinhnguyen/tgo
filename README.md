@@ -56,6 +56,12 @@ TGO is an open-source AI agent customer service platform dedicated to helping en
 - **Rich Components** - Order cards, logistics tracking, product display, price comparison
 - **Action Protocol** - Standardized URI protocol for interactions
 
+## 🏗️ System Architecture
+
+<p align="center">
+  <img src="resources/architecture_en.svg" width="100%" alt="TGO System Architecture">
+</p>
+
 ## Product Preview
 
 | | |
