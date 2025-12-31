@@ -336,9 +336,14 @@ async def run_background_ai_interaction(
     expected_output: Optional[str] = None,
     agent_ids: Optional[List[str]] = None,
     agent_id: Optional[str] = None,
+    started_event: Optional[asyncio.Event] = None,
 ):
-    """Run AI interaction in the background."""
-    async for _ in process_ai_stream_to_wukongim(
+    """Run AI interaction in the background.
+    
+    Args:
+        started_event: Optional asyncio.Event that will be set when team_run_started is received.
+    """
+    async for event_payload in process_ai_stream_to_wukongim(
         project_id=project_id,
         visitor_id=visitor_id,
         message=message,
@@ -353,7 +358,11 @@ async def run_background_ai_interaction(
         agent_ids=agent_ids,
         agent_id=agent_id,
     ):
-        pass
+        # Signal that AI processing has started
+        if started_event and not started_event.is_set():
+            event_type = event_payload.get("event_type")
+            if event_type == "team_run_started":
+                started_event.set()
 
 
 # ============================================================================

@@ -3,9 +3,212 @@
  */
 
 import React from 'react';
+import styled from '@emotion/styled';
 import { ShoppingBag, Star } from 'lucide-react';
 import type { WidgetDefinition, WidgetComponentProps, ProductWidgetData } from './types';
 import { ActionButtons, formatPrice } from './shared';
+
+/**
+ * 样式组件
+ */
+
+const ProductCard = styled.div`
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  background-color: #ffffff;
+  margin: 12px 0;
+
+  .dark & {
+    border-color: #374151;
+    background-color: #1f2937;
+  }
+`;
+
+const ImageContainer = styled.div`
+  position: relative;
+`;
+
+const ProductThumbnail = styled.img`
+  width: 100%;
+  height: 192px;
+  object-fit: cover;
+`;
+
+const DiscountLabel = styled.span`
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  background-color: #ef4444;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+`;
+
+const ContentBox = styled.div`
+  padding: 16px;
+`;
+
+const TagsContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+`;
+
+const Tag = styled.span`
+  padding: 2px 8px;
+  background-color: #fef2f2;
+  color: #dc2626;
+  font-size: 12px;
+  border-radius: 4px;
+
+  .dark & {
+    background-color: rgba(127, 29, 29, 0.2);
+    color: #f87171;
+  }
+`;
+
+const ProductName = styled.h3`
+  font-weight: 600;
+  font-size: 18px;
+  color: #111827;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  .dark & {
+    color: #f9fafb;
+  }
+`;
+
+const ProductBrand = styled.p`
+  font-size: 14px;
+  color: #6b7280;
+  margin: 4px 0 0 0;
+
+  .dark & {
+    color: #9ca3af;
+  }
+`;
+
+const ProductDescription = styled.p`
+  font-size: 14px;
+  color: #4b5563;
+  margin: 8px 0 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  .dark & {
+    color: #9ca3af;
+  }
+`;
+
+const PriceContainer = styled.div`
+  margin-top: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+`;
+
+const CurrentPrice = styled.span`
+  font-size: 24px;
+  color: #ef4444;
+  font-weight: 700;
+
+  .dark & {
+    color: #f87171;
+  }
+`;
+
+const OriginalPrice = styled.span`
+  font-size: 14px;
+  color: #9ca3af;
+  text-decoration: line-through;
+
+  .dark & {
+    color: #6b7280;
+  }
+`;
+
+const RatingContainer = styled.div`
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+`;
+
+const RatingValue = styled.span`
+  font-weight: 500;
+  color: #111827;
+
+  .dark & {
+    color: #f9fafb;
+  }
+`;
+
+const ReviewCount = styled.span`
+  color: #9ca3af;
+
+  .dark & {
+    color: #6b7280;
+  }
+`;
+
+const StockStatus = styled.p<{ inStock: boolean }>`
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: ${props => props.inStock ? '#16a34a' : '#ef4444'};
+
+  .dark & {
+    color: ${props => props.inStock ? '#4ade80' : '#f87171'};
+  }
+`;
+
+const SpecsContainer = styled.div`
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .dark & {
+    border-top-color: #374151;
+  }
+`;
+
+const SpecRow = styled.div`
+  display: flex;
+  font-size: 14px;
+`;
+
+const SpecName = styled.span`
+  color: #6b7280;
+  width: 80px;
+  flex-shrink: 0;
+
+  .dark & {
+    color: #9ca3af;
+  }
+`;
+
+const SpecValue = styled.span`
+  color: #374151;
+
+  .dark & {
+    color: #d1d5db;
+  }
+`;
 
 /**
  * 产品 Widget 组件
@@ -20,89 +223,85 @@ const ProductWidgetComponent: React.FC<WidgetComponentProps<ProductWidgetData>> 
   const hasDiscount = data.original_price && data.original_price > data.price;
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-gray-800 my-3">
+    <ProductCard>
       {/* 图片 */}
       {data.thumbnail && (
-        <div className="relative">
-          <img
+        <ImageContainer>
+          <ProductThumbnail
             src={data.thumbnail.url}
             alt={data.thumbnail.alt || data.name}
-            className="w-full h-48 object-cover"
           />
           {data.discount_label && (
-            <span className="absolute top-2 left-2 px-2 py-1 bg-red-500 text-white text-xs font-medium rounded">
+            <DiscountLabel>
               {data.discount_label}
-            </span>
+            </DiscountLabel>
           )}
-        </div>
+        </ImageContainer>
       )}
 
-      <div className="p-4">
+      <ContentBox>
         {/* 标签 */}
         {data.tags && data.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
+          <TagsContainer>
             {data.tags.slice(0, 3).map((tag, index) => (
-              <span
-                key={index}
-                className="px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs rounded"
-              >
+              <Tag key={index}>
                 {tag}
-              </span>
+              </Tag>
             ))}
-          </div>
+          </TagsContainer>
         )}
 
         {/* 名称 */}
-        <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 line-clamp-2">{data.name}</h3>
+        <ProductName>{data.name}</ProductName>
 
         {/* 品牌 */}
         {data.brand && (
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{data.brand}</p>
+          <ProductBrand>{data.brand}</ProductBrand>
         )}
 
         {/* 描述 */}
         {data.description && (
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{data.description}</p>
+          <ProductDescription>{data.description}</ProductDescription>
         )}
 
         {/* 价格 */}
-        <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-2xl text-red-500 dark:text-red-400 font-bold">
+        <PriceContainer>
+          <CurrentPrice>
             {formatPrice(data.price, currency)}
-          </span>
+          </CurrentPrice>
           {hasDiscount && (
-            <span className="text-sm text-gray-400 dark:text-gray-500 line-through">
+            <OriginalPrice>
               {formatPrice(data.original_price!, currency)}
-            </span>
+            </OriginalPrice>
           )}
-        </div>
+        </PriceContainer>
 
         {/* 评分 */}
         {data.rating !== undefined && data.rating !== null && (
-          <div className="mt-2 flex items-center gap-1.5 text-sm">
-            <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-            <span className="font-medium text-gray-900 dark:text-gray-100">{(Number(data.rating) || 0).toFixed(1)}</span>
+          <RatingContainer>
+            <Star size={16} color="#facc15" fill="#facc15" />
+            <RatingValue>{(Number(data.rating) || 0).toFixed(1)}</RatingValue>
             {data.review_count !== undefined && (
-              <span className="text-gray-400 dark:text-gray-500">({data.review_count}条评价)</span>
+              <ReviewCount>({data.review_count}条评价)</ReviewCount>
             )}
-          </div>
+          </RatingContainer>
         )}
 
         {/* 库存状态 */}
-        <p className={`mt-2 text-sm font-medium ${data.in_stock !== false ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+        <StockStatus inStock={data.in_stock !== false}>
           {data.in_stock !== false ? (data.stock_status || '有货') : '暂时缺货'}
-        </p>
+        </StockStatus>
 
         {/* 规格 */}
         {data.specs && data.specs.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 space-y-1">
+          <SpecsContainer>
             {data.specs.slice(0, 4).map((spec, index) => (
-              <div key={index} className="flex text-sm">
-                <span className="text-gray-500 dark:text-gray-400 w-20 flex-shrink-0">{spec.name}</span>
-                <span className="text-gray-700 dark:text-gray-300">{spec.value}</span>
-              </div>
+              <SpecRow key={index}>
+                <SpecName>{spec.name}</SpecName>
+                <SpecValue>{spec.value}</SpecValue>
+              </SpecRow>
             ))}
-          </div>
+          </SpecsContainer>
         )}
 
         {/* 操作按钮 */}
@@ -112,21 +311,9 @@ const ProductWidgetComponent: React.FC<WidgetComponentProps<ProductWidgetData>> 
           onSendMessage={onSendMessage}
           onCopySuccess={onCopySuccess}
         />
-      </div>
-    </div>
+      </ContentBox>
+    </ProductCard>
   );
-};
-
-/**
- * 产品 Widget 定义
- */
-export const productWidgetDefinition: WidgetDefinition<ProductWidgetData> = {
-  type: 'product',
-  displayName: '商品详情',
-  description: '显示单个商品的详细信息',
-  component: ProductWidgetComponent,
-  icon: <ShoppingBag className="w-4 h-4" />,
-  toolbarColor: 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50',
 };
 
 export default ProductWidgetComponent;

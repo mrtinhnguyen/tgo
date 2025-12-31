@@ -133,6 +133,33 @@ jobs:
       - name: Set build metadata
         run: |
           echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+          
+          REF_NAME="${{ github.ref_name }}"
+          EVENT_NAME="${{ github.event_name }}"
+          
+          # Determine if we should skip 'latest' tag
+          # Skip for: workflow_dispatch (manual), or -dev suffix tags
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            # Manual trigger: use branch name as tag, skip 'latest'
+            echo "IS_DEV_BUILD=true" >> $GITHUB_ENV
+            echo "BUILD_TYPE=manual" >> $GITHUB_ENV
+            echo "🔧 Manual build from branch: $REF_NAME (will not update 'latest' tag)"
+          elif [[ "$REF_NAME" == *-dev ]]; then
+            # Dev tag: skip 'latest'
+            echo "IS_DEV_BUILD=true" >> $GITHUB_ENV
+            echo "BUILD_TYPE=dev" >> $GITHUB_ENV
+            echo "⚠️ Dev build detected: $REF_NAME (will not update 'latest' tag)"
+          else
+            # Release tag: update 'latest'
+            echo "IS_DEV_BUILD=false" >> $GITHUB_ENV
+            echo "BUILD_TYPE=release" >> $GITHUB_ENV
+            echo "✓ Release build: $REF_NAME (will update 'latest' tag)"
+          fi
+          
+          # Sanitize branch name for use as Docker tag (replace / with -)
+          SANITIZED_TAG=$(echo "$REF_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          echo "IMAGE_VERSION=$SANITIZED_TAG" >> $GITHUB_ENV
+          echo "📦 Image version tag: $SANITIZED_TAG"
 
       - name: Free up disk space
         if: matrix.service == 'tgo-rag'
@@ -189,6 +216,38 @@ jobs:
           username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
           password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
+      - name: Generate image tags
+        id: tags
+        run: |
+          SERVICE="${{ matrix.service }}"
+          VERSION="${{ env.IMAGE_VERSION }}"
+          
+          echo "=== Tag Generation ==="
+          echo "Service: $SERVICE"
+          echo "Version: $VERSION"
+          echo "Build type: ${{ env.BUILD_TYPE }}"
+          echo ""
+          
+          # Base tags (always included)
+          TAGS="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${SERVICE}:${VERSION}"
+          TAGS="${TAGS},tgoai/${SERVICE}:${VERSION}"
+          TAGS="${TAGS},registry.cn-shanghai.aliyuncs.com/tgoai/${SERVICE}:${VERSION}"
+          
+          # Add 'latest' tags only for release builds (not dev or manual)
+          if [ "${{ env.IS_DEV_BUILD }}" != "true" ]; then
+            echo "✓ Adding 'latest' tags (release build)"
+            TAGS="${TAGS},ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${SERVICE}:latest"
+            TAGS="${TAGS},tgoai/${SERVICE}:latest"
+            TAGS="${TAGS},registry.cn-shanghai.aliyuncs.com/tgoai/${SERVICE}:latest"
+          else
+            echo "⚠️ Skipping 'latest' tags (${{ env.BUILD_TYPE }} build)"
+          fi
+          
+          echo ""
+          echo "Generated tags:"
+          echo "$TAGS" | tr ',' '\n'
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+
       - name: Build and push image for ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
@@ -196,23 +255,17 @@ jobs:
           file: ./repos/${{ matrix.service }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.service }}:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.service }}:latest
-            tgoai/${{ matrix.service }}:${{ github.ref_name }}
-            tgoai/${{ matrix.service }}:latest
-            registry.cn-shanghai.aliyuncs.com/tgoai/${{ matrix.service }}:${{ github.ref_name }}
-            registry.cn-shanghai.aliyuncs.com/tgoai/${{ matrix.service }}:latest
+          tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ env.IMAGE_VERSION }}
             org.opencontainers.image.title=${{ matrix.service }}
           build-args: |
             SERVICE_NAME=${{ matrix.service }}
-            IMAGE_TAG=${{ github.ref_name }}
+            IMAGE_TAG=${{ env.IMAGE_VERSION }}
             GIT_SHA=${{ github.sha }}
-            APP_VERSION=${{ github.ref_name }}
+            APP_VERSION=${{ env.IMAGE_VERSION }}
             GIT_COMMIT=${{ github.sha }}
             BUILD_TIME=${{ env.BUILD_TIME }}
           cache-from: type=gha
@@ -221,24 +274,45 @@ jobs:
       - name: Verify multi-architecture manifest
         run: |
           echo "Verifying multi-architecture manifest for ${{ matrix.service }}..."
-
-          # Check GHCR manifest
-          docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.service }}:latest
+          
+          # Use version tag for verification (always exists)
+          IMAGE_TAG="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.service }}:${{ env.IMAGE_VERSION }}"
+          
+          echo "Inspecting: $IMAGE_TAG"
+          docker buildx imagetools inspect "$IMAGE_TAG"
 
           # Verify both architectures are present
-          if docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.service }}:latest | grep -q "linux/amd64"; then
+          if docker buildx imagetools inspect "$IMAGE_TAG" | grep -q "linux/amd64"; then
             echo "✓ AMD64 architecture found"
           else
             echo "✗ AMD64 architecture missing"
             exit 1
           fi
 
-          if docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ matrix.service }}:latest | grep -q "linux/arm64"; then
+          if docker buildx imagetools inspect "$IMAGE_TAG" | grep -q "linux/arm64"; then
             echo "✓ ARM64 architecture found"
           else
             echo "✗ ARM64 architecture missing"
             exit 1
           fi
 
+          echo ""
+          echo "=== Build Summary ==="
           echo "Multi-architecture build verified successfully!"
+          
+          case "${{ env.BUILD_TYPE }}" in
+            manual)
+              echo "🔧 Manual build from branch '${{ github.ref_name }}'"
+              echo "📦 Image tag: ${{ env.IMAGE_VERSION }}"
+              echo "⚠️ 'latest' tag was NOT updated"
+              ;;
+            dev)
+              echo "🧪 Dev build: ${{ env.IMAGE_VERSION }}"
+              echo "⚠️ 'latest' tag was NOT updated"
+              ;;
+            release)
+              echo "🚀 Release build: ${{ env.IMAGE_VERSION }}"
+              echo "✓ 'latest' tag was updated"
+              ;;
+          esac
 

@@ -3,21 +3,164 @@
  */
 
 import React from 'react';
+import styled from '@emotion/styled';
 import { Truck, Phone, MapPin, Clock } from 'lucide-react';
 import type { WidgetDefinition, WidgetComponentProps, LogisticsWidgetData, LogisticsStatus } from './types';
 import { WidgetCard, WidgetHeader, StatusBadge, ActionButtons } from './shared';
 
 /**
+ * 样式组件
+ */
+
+const CarrierLogo = styled.img`
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+`;
+
+const EstimatedDeliveryBox = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #16a34a;
+  margin-bottom: 16px;
+  padding: 8px;
+  background-color: #f0fdf4;
+  border-radius: 8px;
+
+  .dark & {
+    color: #4ade80;
+    background-color: rgba(20, 83, 45, 0.2);
+  }
+`;
+
+const CourierInfoBox = styled.div`
+  padding: 12px;
+  background-color: #f9fafb;
+  border-radius: 8px;
+  margin-bottom: 16px;
+
+  .dark & {
+    background-color: rgba(55, 65, 81, 0.5);
+  }
+`;
+
+const CourierFlex = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const CourierLabel = styled.span`
+  font-size: 14px;
+  color: #4b5563;
+  .dark & { color: #9ca3af; }
+`;
+
+const CourierName = styled.span`
+  font-weight: 500;
+  color: #111827;
+  .dark & { color: #f9fafb; }
+`;
+
+const CourierPhoneLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 14px;
+  &:hover { color: #1d4ed8; }
+  .dark & { color: #60a5fa; &:hover { color: #3b82f6; } }
+`;
+
+const TimelineContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+`;
+
+const TimelineItem = styled.div`
+  display: flex;
+  gap: 12px;
+`;
+
+const TimelineLeft = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const TimelineDot = styled.div<{ bgColor?: string }>`
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: ${props => props.bgColor || '#d1d5db'};
+  box-shadow: 0 0 0 4px #ffffff;
+  z-index: 1;
+
+  .dark & {
+    box-shadow: 0 0 0 4px #1f2937;
+  }
+`;
+
+const TimelineLine = styled.div`
+  width: 2px;
+  flex: 1;
+  background-color: #e5e7eb;
+  margin: 4px 0;
+  min-height: 24px;
+
+  .dark & {
+    background-color: #374151;
+  }
+`;
+
+const TimelineContent = styled.div`
+  flex: 1;
+  padding-bottom: 16px;
+`;
+
+const TimelineTime = styled.p`
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+  .dark & { color: #9ca3af; }
+`;
+
+const TimelineDescription = styled.p<{ active?: boolean }>`
+  font-size: 14px;
+  margin: 4px 0 0 0;
+  font-weight: ${props => props.active ? '500' : '400'};
+  color: ${props => props.active ? '#111827' : '#374151'};
+
+  .dark & {
+    color: ${props => props.active ? '#f9fafb' : '#d1d5db'};
+  }
+`;
+
+const TimelineLocation = styled.p`
+  font-size: 12px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  .dark & { color: #9ca3af; }
+`;
+
+/**
  * 物流状态配色映射
  */
 const logisticsStatusConfig: Record<LogisticsStatus, { bgColor: string }> = {
-  pending: { bgColor: 'bg-gray-400' },
-  picked_up: { bgColor: 'bg-blue-500' },
-  in_transit: { bgColor: 'bg-purple-500' },
-  out_for_delivery: { bgColor: 'bg-orange-500' },
-  delivered: { bgColor: 'bg-green-500' },
-  exception: { bgColor: 'bg-red-500' },
-  returned: { bgColor: 'bg-gray-500' },
+  pending: { bgColor: '#9ca3af' }, // bg-gray-400
+  picked_up: { bgColor: '#3b82f6' }, // bg-blue-500
+  in_transit: { bgColor: '#a855f7' }, // bg-purple-500
+  out_for_delivery: { bgColor: '#f97316' }, // bg-orange-500
+  delivered: { bgColor: '#22c55e' }, // bg-green-500
+  exception: { bgColor: '#ef4444' }, // bg-red-500
+  returned: { bgColor: '#6b7280' }, // bg-gray-500
 };
 
 /**
@@ -35,14 +178,14 @@ const LogisticsWidgetComponent: React.FC<WidgetComponentProps<LogisticsWidgetDat
       <WidgetHeader
         icon={
           data.carrier_logo ? (
-            <img src={data.carrier_logo} alt={data.carrier} className="w-5 h-5 rounded" />
+            <CarrierLogo src={data.carrier_logo} alt={data.carrier} />
           ) : (
-            <Truck className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            <Truck size={20} color="#9333ea" />
           )
         }
-        iconBgColor="bg-purple-50 dark:bg-purple-900/30"
+        iconBgColor="#f5f3ff"
         title={data.carrier}
-        subtitle={<span className="font-mono">{data.tracking_number}</span>}
+        subtitle={<span style={{ fontFamily: 'monospace' }}>{data.tracking_number}</span>}
         badge={
           <StatusBadge>
             {data.status_text || data.status}
@@ -52,63 +195,60 @@ const LogisticsWidgetComponent: React.FC<WidgetComponentProps<LogisticsWidgetDat
 
       {/* 预计送达 */}
       {data.estimated_delivery && (
-        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 mb-4 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-          <Clock className="w-4 h-4" />
+        <EstimatedDeliveryBox>
+          <Clock size={16} />
           <span>预计送达: {data.estimated_delivery}</span>
-        </div>
+        </EstimatedDeliveryBox>
       )}
 
       {/* 配送员信息 */}
       {data.courier_name && (
-        <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg mb-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              配送员: <span className="font-medium text-gray-900 dark:text-gray-100">{data.courier_name}</span>
-            </span>
+        <CourierInfoBox>
+          <CourierFlex>
+            <CourierLabel>
+              配送员: <CourierName>{data.courier_name}</CourierName>
+            </CourierLabel>
             {data.courier_phone && (
-              <a
-                href={`tel:${data.courier_phone}`}
-                className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-              >
-                <Phone className="w-4 h-4" />
-                <span className="text-sm">{data.courier_phone}</span>
-              </a>
+              <CourierPhoneLink href={`tel:${data.courier_phone}`}>
+                <Phone size={16} />
+                <span>{data.courier_phone}</span>
+              </CourierPhoneLink>
             )}
-          </div>
-        </div>
+          </CourierFlex>
+        </CourierInfoBox>
       )}
 
       {/* 时间线 */}
-      <div className="space-y-0">
+      <TimelineContainer>
         {(data.timeline || []).map((event, index) => {
           const eventStatusStyle = event.status
             ? logisticsStatusConfig[event.status]
-            : (index === 0 ? { bgColor: 'bg-blue-500' } : { bgColor: 'bg-gray-300 dark:bg-gray-600' });
+            : (index === 0 ? { bgColor: '#3b82f6' } : { bgColor: '#e5e7eb' });
 
           return (
-            <div key={index} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className={`w-3 h-3 rounded-full ${eventStatusStyle.bgColor} ring-4 ring-white dark:ring-gray-800`} />
+            <TimelineItem key={index}>
+              <TimelineLeft>
+                <TimelineDot bgColor={eventStatusStyle.bgColor} />
                 {index < (data.timeline || []).length - 1 && (
-                  <div className="w-0.5 flex-1 bg-gray-200 dark:bg-gray-700 my-1 min-h-[24px]" />
+                  <TimelineLine />
                 )}
-              </div>
-              <div className="flex-1 pb-4">
-                <p className="text-xs text-gray-500 dark:text-gray-400">{event.time}</p>
-                <p className={`text-sm ${index === 0 ? 'font-medium text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>
+              </TimelineLeft>
+              <TimelineContent>
+                <TimelineTime>{event.time}</TimelineTime>
+                <TimelineDescription active={index === 0}>
                   {event.description}
-                </p>
+                </TimelineDescription>
                 {event.location && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3 h-3" />
+                  <TimelineLocation>
+                    <MapPin size={12} />
                     {event.location}
-                  </p>
+                  </TimelineLocation>
                 )}
-              </div>
-            </div>
+              </TimelineContent>
+            </TimelineItem>
           );
         })}
-      </div>
+      </TimelineContainer>
 
       {/* 操作按钮 */}
       <ActionButtons 
@@ -119,18 +259,6 @@ const LogisticsWidgetComponent: React.FC<WidgetComponentProps<LogisticsWidgetDat
       />
     </WidgetCard>
   );
-};
-
-/**
- * 物流 Widget 定义
- */
-export const logisticsWidgetDefinition: WidgetDefinition<LogisticsWidgetData> = {
-  type: 'logistics',
-  displayName: '物流追踪',
-  description: '显示物流状态和时间线',
-  component: LogisticsWidgetComponent,
-  icon: <Truck className="w-4 h-4" />,
-  toolbarColor: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50',
 };
 
 export default LogisticsWidgetComponent;

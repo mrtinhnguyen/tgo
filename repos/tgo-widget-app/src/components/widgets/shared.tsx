@@ -4,9 +4,228 @@
  */
 
 import React, { useCallback, useState } from 'react';
+import styled from '@emotion/styled';
 import { ExternalLink, Copy, MessageSquare, Check } from 'lucide-react';
 import { parseActionURI, executeAction, type ActionProtocol } from '../../utils/actionUri';
 import type { WidgetAction } from './types';
+
+/**
+ * 样式组件定义
+ */
+
+export const StyledWidgetCard = styled.div`
+  border: 1px solid var(--border-primary, #e5e7eb);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  background-color: var(--bg-primary, #ffffff);
+  margin: 12px 0;
+
+  .dark &, .dark-mode & {
+    border-color: #374151;
+    background-color: #1f2937;
+  }
+`;
+
+export const StyledWidgetHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+`;
+
+export const HeaderIconBox = styled.div<{ bgColor?: string }>`
+  padding: 8px;
+  background-color: ${props => props.bgColor || '#eff6ff'};
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .dark & {
+    background-color: ${props => props.bgColor?.includes('blue-50') ? 'rgba(30, 58, 138, 0.3)' : 'rgba(30, 41, 59, 0.5)'};
+  }
+`;
+
+export const HeaderContent = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
+export const HeaderTitle = styled.div`
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+  
+  .dark &, .dark-mode & {
+    color: #f9fafb;
+  }
+`;
+
+export const HeaderSubtitle = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  
+  .dark &, .dark-mode & {
+    color: #9ca3af;
+  }
+`;
+
+export const StyledStatusBadge = styled.span<{ bgColor?: string; textColor?: string }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: ${props => props.bgColor || '#dbeafe'};
+  color: ${props => props.textColor || '#1e40af'};
+
+  .dark &, .dark-mode & {
+    background-color: ${props => props.bgColor ? (props.bgColor.startsWith('#') ? `${props.bgColor}33` : 'rgba(31, 41, 55, 0.8)') : 'rgba(30, 58, 138, 0.3)'};
+    color: ${props => props.textColor ? (props.textColor.startsWith('#') ? '#d1d5db' : '#d1d5db') : '#93c5fd'};
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+`;
+
+export const ActionButtonContainer = styled.div`
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+`;
+
+export const StyledActionButton = styled.button<{ actionStyle?: string }>`
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  ${props => {
+    switch (props.actionStyle) {
+      case 'primary':
+        return `
+          background-color: #2563eb;
+          color: white;
+          border: none;
+          &:hover { background-color: #1d4ed8; }
+          .dark & { background-color: #3b82f6; &:hover { background-color: #2563eb; } }
+        `;
+      case 'danger':
+        return `
+          background-color: #ef4444;
+          color: white;
+          border: none;
+          &:hover { background-color: #dc2626; }
+        `;
+      case 'link':
+        return `
+          background-color: transparent;
+          color: #2563eb;
+          border: none;
+          text-decoration: underline;
+          padding: 0;
+          &:hover { color: #1d4ed8; }
+          .dark & { color: #60a5fa; &:hover { color: #3b82f6; } }
+        `;
+      default:
+        return `
+          background-color: transparent;
+          color: #374151;
+          border: 1px solid #d1d5db;
+          &:hover { background-color: #f9fafb; }
+          .dark & { 
+            border-color: #4b5563; 
+            color: #d1d5db;
+            &:hover { background-color: #374151; } 
+          }
+        `;
+    }
+  }}
+`;
+
+export const StyledInfoRow = styled.div<{ highlight?: boolean }>`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: ${props => props.highlight ? '8px' : '4px'};
+  padding-top: ${props => props.highlight ? '8px' : '0'};
+  border-top: ${props => props.highlight ? '1px solid #f3f4f6' : 'none'};
+  font-size: ${props => props.highlight ? '16px' : '14px'};
+  font-weight: ${props => props.highlight ? '600' : '400'};
+
+  .dark &, .dark-mode & {
+    border-top-color: #374151;
+  }
+`;
+
+export const InfoLabel = styled.span<{ highlight?: boolean }>`
+  color: ${props => props.highlight ? 'var(--text-primary, #111827)' : 'var(--text-secondary, #6b7280)'};
+  .dark &, .dark-mode & {
+    color: ${props => props.highlight ? '#f9fafb' : '#9ca3af'};
+  }
+`;
+
+export const InfoValue = styled.span<{ highlight?: boolean }>`
+  color: ${props => props.highlight ? '#ef4444' : 'var(--text-primary, #374151)'};
+  .dark &, .dark-mode & {
+    color: ${props => props.highlight ? '#f87171' : '#d1d5db'};
+  }
+`;
+
+export const StyledDivider = styled.div`
+  border-top: 1px solid #f3f4f6;
+  margin: 12px 0;
+  .dark &, .dark-mode & {
+    border-top-color: #374151;
+  }
+`;
+
+export const ActionIcon = styled.span`
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 4px;
+  
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+`;
+
+const StyledToast = styled.div<{ type: 'success' | 'error' }>`
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  background-color: ${props => props.type === 'success' ? '#22c55e' : '#ef4444'};
+  color: white;
+  animation: widget-toast-slide-in 0.3s ease-out;
+
+  @keyframes widget-toast-slide-in {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+`;
 
 /**
  * 获取 Action 图标
@@ -14,15 +233,20 @@ import type { WidgetAction } from './types';
 const getActionIcon = (protocol: ActionProtocol | string): React.ReactNode => {
   switch (protocol) {
     case 'url':
-      return <ExternalLink className="inline-block w-3 h-3 ml-1" />;
+      return <ActionIcon><ExternalLink /></ActionIcon>;
     case 'copy':
-      return <Copy className="inline-block w-3 h-3 ml-1" />;
+      return <ActionIcon><Copy /></ActionIcon>;
     case 'msg':
-      return <MessageSquare className="inline-block w-3 h-3 ml-1" />;
+      return <ActionIcon><MessageSquare /></ActionIcon>;
     default:
       return null;
   }
 };
+
+const ToastMessage = styled.span`
+  font-size: 14px;
+  font-weight: 500;
+`;
 
 /**
  * 简单的内联 Toast 提示
@@ -37,46 +261,15 @@ const InlineToast: React.FC<{
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  // 内联 keyframes 动画
-  React.useEffect(() => {
-    const styleId = 'widget-toast-animation';
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.textContent = `
-        @keyframes widget-toast-slide-in {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-  }, []);
-
   return (
-    <div
-      className={`fixed bottom-4 right-4 z-[9999] flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg ${
-        type === 'success'
-          ? 'bg-green-500 text-white'
-          : 'bg-red-500 text-white'
-      }`}
-      style={{
-        animation: 'widget-toast-slide-in 0.3s ease-out',
-      }}
-    >
+    <StyledToast type={type}>
       {type === 'success' ? (
-        <Check className="w-4 h-4" />
+        <Check size={16} />
       ) : (
-        <ExternalLink className="w-4 h-4" />
+        <ExternalLink size={16} />
       )}
-      <span className="text-sm font-medium">{message}</span>
-    </div>
+      <ToastMessage>{message}</ToastMessage>
+    </StyledToast>
   );
 };
 
@@ -102,7 +295,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
   onAction,
   onCopySuccess,
 }) => {
-  // Toast 状态
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
@@ -117,7 +309,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     const parsed = parseActionURI(action.action);
 
     if (parsed.isValid) {
-      // 使用 Action URI 处理
       const result = await executeAction(action.action, {
         onSendMessage: (msg) => {
           if (onSendMessage) {
@@ -129,9 +320,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           }
         },
         onCopySuccess: (text) => {
-          // 显示复制成功提示
           showToast('已复制到剪贴板', 'success');
-          // 调用外部回调
           onCopySuccess?.(text);
         },
         onCopyError: (error) => {
@@ -139,21 +328,17 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           showToast('复制失败', 'error');
         },
         onUnknownProtocol: (uri) => {
-          // 回退到旧的处理方式
           console.log('[ActionButtons] Unknown protocol, fallback:', uri.raw);
           onAction?.(uri.raw, action.payload);
         },
       });
 
-      // 如果是 url:// 协议，不需要额外提示，window.open 会打开新窗口
       if (!result.success && parsed.protocol !== 'url') {
         console.warn('[ActionButtons] Action failed:', result.error);
       }
     } else if (action.url) {
-      // 兼容旧的 url 字段
       window.open(action.url, '_blank', 'noopener,noreferrer');
     } else {
-      // 兼容旧的 action 字段（非 URI 格式）
       onAction?.(action.action, action.payload);
     }
   }, [onSendMessage, onAction, onCopySuccess, showToast]);
@@ -162,32 +347,23 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
   return (
     <>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <ActionButtonContainer>
         {actions.map((action, index) => {
           const parsed = parseActionURI(action.action);
-          const icon = parsed.isValid ? getActionIcon(parsed.protocol) : (action.url ? <ExternalLink className="inline-block w-3 h-3 ml-1" /> : null);
+          const icon = parsed.isValid ? getActionIcon(parsed.protocol) : (action.url ? <ActionIcon><ExternalLink /></ActionIcon> : null);
 
           return (
-            <button
+            <StyledActionButton
               key={index}
               onClick={() => handleClick(action)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                action.style === 'primary'
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
-                  : action.style === 'danger'
-                    ? 'bg-red-500 text-white hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700'
-                    : action.style === 'link'
-                      ? 'text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline'
-                      : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
+              actionStyle={action.style}
             >
               {action.label}
               {icon}
-            </button>
+            </StyledActionButton>
           );
         })}
-      </div>
-      {/* Toast 提示 */}
+      </ActionButtonContainer>
       {toast && (
         <InlineToast
           message={toast.message}
@@ -205,10 +381,10 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 export const WidgetCard: React.FC<{
   children: React.ReactNode;
   className?: string;
-}> = ({ children, className = '' }) => (
-  <div className={`border border-gray-200 dark:border-gray-700 rounded-xl p-5 shadow-sm bg-white dark:bg-gray-800 my-3 ${className}`}>
+}> = ({ children }) => (
+  <StyledWidgetCard>
     {children}
-  </div>
+  </StyledWidgetCard>
 );
 
 /**
@@ -220,21 +396,21 @@ export const WidgetHeader: React.FC<{
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   badge?: React.ReactNode;
-}> = ({ icon, iconBgColor = 'bg-blue-50 dark:bg-blue-900/30', title, subtitle, badge }) => (
-  <div className="flex justify-between items-start mb-4">
-    <div className="flex items-center gap-3">
+}> = ({ icon, iconBgColor, title, subtitle, badge }) => (
+  <StyledWidgetHeader>
+    <HeaderContent>
       {icon && (
-        <div className={`p-2 ${iconBgColor} rounded-lg`}>
+        <HeaderIconBox bgColor={iconBgColor}>
           {icon}
-        </div>
+        </HeaderIconBox>
       )}
       <div>
-        {subtitle && <span className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</span>}
-        <div className="font-semibold text-gray-900 dark:text-gray-100">{title}</div>
+        {subtitle && <HeaderSubtitle>{subtitle}</HeaderSubtitle>}
+        <HeaderTitle>{title}</HeaderTitle>
       </div>
-    </div>
+    </HeaderContent>
     {badge}
-  </div>
+  </StyledWidgetHeader>
 );
 
 /**
@@ -248,13 +424,13 @@ export const StatusBadge: React.FC<{
 }> = ({ 
   children, 
   icon, 
-  bgColor = 'bg-blue-100 dark:bg-blue-900/30', 
-  textColor = 'text-blue-800 dark:text-blue-300' 
+  bgColor, 
+  textColor 
 }) => (
-  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${bgColor} ${textColor}`}>
+  <StyledStatusBadge bgColor={bgColor} textColor={textColor}>
     {icon}
     {children}
-  </span>
+  </StyledStatusBadge>
 );
 
 /**
@@ -265,17 +441,17 @@ export const InfoRow: React.FC<{
   value: React.ReactNode;
   highlight?: boolean;
 }> = ({ label, value, highlight }) => (
-  <div className={`flex justify-between ${highlight ? 'font-semibold text-base pt-2 border-t border-gray-100 dark:border-gray-700' : 'text-sm'}`}>
-    <span className={highlight ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}>{label}</span>
-    <span className={highlight ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}>{value}</span>
-  </div>
+  <StyledInfoRow highlight={highlight}>
+    <InfoLabel highlight={highlight}>{label}</InfoLabel>
+    <InfoValue highlight={highlight}>{value}</InfoValue>
+  </StyledInfoRow>
 );
 
 /**
  * 分隔线
  */
-export const Divider: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <div className={`border-t border-gray-100 dark:border-gray-700 ${className}`} />
+export const Divider: React.FC<{ className?: string }> = () => (
+  <StyledDivider />
 );
 
 /**
@@ -287,3 +463,44 @@ export function formatPrice(price: number | undefined | null, currency: string =
   }
   return `${currency}${price.toFixed(2)}`;
 }
+
+/**
+ * 工具栏按钮样式组件（支持动态颜色）
+ */
+export const ToolbarButton = styled.button<{
+  toolbarColor?: {
+    color: string;
+    background: string;
+    hoverBackground: string;
+    darkColor: string;
+    darkBackground: string;
+    darkHoverBackground: string;
+  };
+}>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  
+  color: ${props => props.toolbarColor?.color || '#374151'};
+  background-color: ${props => props.toolbarColor?.background || '#f3f4f6'};
+  
+  &:hover {
+    background-color: ${props => props.toolbarColor?.hoverBackground || '#e5e7eb'};
+  }
+
+  .dark &, .dark-mode & {
+    color: ${props => props.toolbarColor?.darkColor || '#d1d5db'};
+    background-color: ${props => props.toolbarColor?.darkBackground || 'rgba(55, 65, 81, 0.5)'};
+    
+    &:hover {
+      background-color: ${props => props.toolbarColor?.darkHoverBackground || 'rgba(55, 65, 81, 0.8)'};
+    }
+  }
+`;

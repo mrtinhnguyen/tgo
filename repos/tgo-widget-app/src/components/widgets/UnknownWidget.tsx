@@ -4,27 +4,81 @@
  */
 
 import React from 'react';
+import styled from '@emotion/styled';
 import { AlertCircle } from 'lucide-react';
 import type { WidgetComponentProps, WidgetData } from './types';
+
+const UnknownContainer = styled.div`
+  padding: 16px;
+  background-color: #fefce8;
+  border: 1px solid #fef08a;
+  border-radius: 8px;
+  margin: 12px 0;
+
+  .dark & {
+    background-color: rgba(113, 63, 18, 0.2);
+    border-color: #a16207;
+  }
+`;
+
+const Message = styled.p`
+  color: #854d0e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+
+  .dark & {
+    color: #fde047;
+  }
+`;
+
+const Details = styled.details`
+  margin-top: 8px;
+`;
+
+const Summary = styled.summary`
+  font-size: 14px;
+  color: #ca8a04;
+  cursor: pointer;
+
+  .dark & {
+    color: #facc15;
+  }
+`;
+
+const RawData = styled.pre`
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #fef9c3;
+  border-radius: 4px;
+  font-size: 12px;
+  overflow: auto;
+  max-height: 160px;
+
+  .dark & {
+    background-color: rgba(113, 63, 18, 0.3);
+  }
+`;
 
 /**
  * 未知 Widget 组件
  */
 const UnknownWidgetComponent: React.FC<WidgetComponentProps<WidgetData>> = ({ data }) => (
-  <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg my-3">
-    <p className="text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
-      <AlertCircle className="w-5 h-5" />
+  <UnknownContainer>
+    <Message>
+      <AlertCircle size={20} />
       未知的 UI 组件类型: {data.type}
-    </p>
-    <details className="mt-2">
-      <summary className="text-sm text-yellow-600 dark:text-yellow-400 cursor-pointer">
+    </Message>
+    <Details>
+      <Summary>
         查看原始数据
-      </summary>
-      <pre className="mt-2 p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded text-xs overflow-auto max-h-40">
+      </Summary>
+      <RawData>
         {JSON.stringify(data, null, 2)}
-      </pre>
-    </details>
-  </div>
+      </RawData>
+    </Details>
+  </UnknownContainer>
 );
 
 export default UnknownWidgetComponent;

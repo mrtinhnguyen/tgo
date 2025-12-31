@@ -4,6 +4,7 @@ import { css } from '@emotion/react'
 import Header from './components/Header'
 import MessageList from './components/MessageList'
 import MessageInput from './components/MessageInput'
+import { ImagePreviewProvider } from './components/ImagePreview'
 import { useChatStore, usePlatformStore } from './store'
 import { resolveApiKey, resolveMode } from './utils/url'
 import { recordVisitorActivity } from './services/visitorActivity'
@@ -467,6 +468,7 @@ export default function App(){
           `}
         >Powered by tgo.ai</a>
       </WidgetWrap>
+      <ImagePreviewProvider />
     </ThemeProvider>
   )
 }

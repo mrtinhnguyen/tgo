@@ -1,70 +1,22 @@
 # Multi-stage Dockerfile for RAG Service
-# Optimized for layer caching - dependencies are installed before source code
+# Optimized for maximum layer caching
 
 # =========================
-# Base stage with system deps (shared by builder and dev)
+# Stage 1: Base with system deps (shared by all stages)
 # =========================
 FROM python:3.11-slim AS base-deps
 
-# Install common system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install common system dependencies + Playwright browser deps
+# Combining all apt operations into one layer for better caching
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    # Build tools
     build-essential \
     curl \
     libpq-dev \
     libmagic1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Poetry (cached layer)
-RUN pip install poetry==1.7.1
-
-# =========================
-# Builder stage (Python deps only)
-# =========================
-FROM base-deps AS builder
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
-# Configure Poetry to use a project-local virtualenv
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
-
-# Set work directory
-WORKDIR /app
-
-# Copy ONLY dependency files first (for better caching)
-COPY pyproject.toml poetry.lock* ./
-
-# Install only production dependencies into .venv (cached if deps unchanged)
-RUN poetry install --only=main --no-root && rm -rf "$POETRY_CACHE_DIR"
-
-# Download NLTK data (cached layer)
-RUN .venv/bin/python -m nltk.downloader -d /app/nltk_data punkt punkt_tab averaged_perceptron_tagger averaged_perceptron_tagger_eng
-
-# =========================
-# Development stage (keeps Poetry + dev deps)
-# =========================
-FROM base-deps AS development
-
-# Dev environment
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
-WORKDIR /app
-
-# Install additional dev system dependencies (separate layer for caching)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    poppler-utils \
-    tesseract-ocr \
-    libreoffice-core \
-    # Playwright/Chromium dependencies
+    # Playwright/Chromium dependencies (pre-install to avoid playwright install-deps)
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -83,58 +35,125 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libcairo2 \
     fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Configure Poetry (dev image can use global env)
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VENV_IN_PROJECT=0 \
+# Install Poetry (cached layer)
+RUN pip install --no-cache-dir poetry==1.7.1
+
+# =========================
+# Stage 2: Python dependencies builder
+# =========================
+FROM base-deps AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=1 \
+    POETRY_VIRTUALENVS_CREATE=1 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
+
+WORKDIR /app
+
+# Copy ONLY dependency files first (for better caching)
+COPY pyproject.toml poetry.lock* ./
+
+# Install only production dependencies into .venv
+# Use BuildKit cache mount for faster rebuilds
+RUN --mount=type=cache,target=/tmp/poetry_cache \
+    poetry install --only=main --no-root
+
+# Download NLTK data (cached layer)
+RUN .venv/bin/python -m nltk.downloader -d /app/nltk_data punkt punkt_tab averaged_perceptron_tagger averaged_perceptron_tagger_eng
+
+# =========================
+# Stage 3: Playwright browser download (separate for caching)
+# =========================
+FROM base-deps AS playwright-cache
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PLAYWRIGHT_BROWSERS_PATH=/playwright-browsers
+
+WORKDIR /app
+
+# Copy virtualenv from builder
+COPY --from=builder /app/.venv /app/.venv
+
+# Download Playwright browsers to a fixed path (NOT using cache mount here)
+# This layer is cached and only rebuilds when base-deps or venv changes
+RUN playwright install chromium
+
+# =========================
+# Stage 4: Development (keeps Poetry + dev deps)
+# =========================
+FROM base-deps AS development
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     POETRY_CACHE_DIR=/tmp/poetry_cache
 
-# Copy ONLY dependency files first (cached layer)
+WORKDIR /app
+
+# Install additional dev system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    poppler-utils \
+    tesseract-ocr \
+    libreoffice-core \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files
 COPY pyproject.toml poetry.lock* ./
 
-# Install dependencies including dev (cached if deps unchanged)
-RUN poetry install --with dev --no-root && rm -rf "$POETRY_CACHE_DIR"
+# Install dependencies including dev
+RUN --mount=type=cache,target=/tmp/poetry_cache \
+    poetry install --with dev --no-root
 
-# Install Playwright browsers (cached layer - only re-runs if deps change)
-RUN playwright install chromium && playwright install-deps chromium
+# Install Playwright browsers
+RUN playwright install chromium
 
-# Download NLTK data (cached layer)
+# Download NLTK data
 RUN python -m nltk.downloader -d /app/nltk_data punkt punkt_tab averaged_perceptron_tagger averaged_perceptron_tagger_eng
 ENV NLTK_DATA=/app/nltk_data
 
 # Create uploads directory
 RUN mkdir -p /app/uploads
 
-# NOW copy source code (this layer changes frequently, but deps are cached above)
+# Copy source code (last step for dev)
 COPY . .
 
-# Expose port
 EXPOSE 8082
 
-# Default command for development (with reload)
 CMD ["poetry", "run", "uvicorn", "src.rag_service.main:app", "--host", "0.0.0.0", "--port", "8082", "--reload"]
 
 # =========================
-# Production runtime stage
+# Stage 5: Production runtime (minimal, uses cached artifacts)
 # =========================
 FROM python:3.11-slim AS production
 
-# Runtime environment
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    HOME=/home/rag \
+    XDG_CACHE_HOME=/home/rag/.cache \
+    PATH="/app/.venv/bin:$PATH" \
+    NLTK_DATA=/app/nltk_data \
+    PLAYWRIGHT_BROWSERS_PATH=/home/rag/.cache/ms-playwright
 
-# Install runtime system dependencies including OCR/office tools and Playwright deps
-# This layer is cached and only rebuilds when apt packages change
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install ONLY runtime system dependencies (no build tools)
+# Pre-install Playwright browser deps to avoid playwright install-deps
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    libpq-dev \
+    libpq5 \
     libmagic1 \
     libreoffice-core \
-    # Playwright/Chromium dependencies
+    # Playwright/Chromium runtime dependencies
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -157,42 +176,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/cache/apt/*
 
-# Set home and cache directories for non-root user
-ENV HOME=/home/rag XDG_CACHE_HOME=/home/rag/.cache
-
-# Create non-root user
+# Create non-root user and directories
 RUN groupadd -r rag && useradd -r -g rag rag && \
     mkdir -p /home/rag/.cache /app/uploads /app/logs && \
     chown -R rag:rag /home/rag /app
 
-# Set work directory
 WORKDIR /app
 
 # Copy virtualenv from builder (cached - only changes when deps change)
 COPY --from=builder --chown=rag:rag /app/.venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy NLTK data from builder (cached)
 COPY --from=builder --chown=rag:rag /app/nltk_data /app/nltk_data
-ENV NLTK_DATA=/app/nltk_data
 
-# Install Playwright browsers BEFORE copying source code (cached layer)
-# This ensures browser download is cached even when source changes
-RUN playwright install chromium && playwright install-deps chromium \
-    && chown -R rag:rag /home/rag/.cache
+# Copy Playwright browsers from playwright-cache stage (cached independently)
+COPY --from=playwright-cache --chown=rag:rag /playwright-browsers /home/rag/.cache/ms-playwright
 
-# NOW copy source code (this changes frequently but all heavy deps are cached above)
+# Copy source code LAST (this changes most frequently)
 COPY --chown=rag:rag . .
 
-# Switch to non-root user
 USER rag
 
-# Expose port
 EXPOSE 8082
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8082/health || exit 1
 
-# Default command for production: run via uvicorn directly (no Poetry at runtime)
 CMD ["uvicorn", "src.rag_service.main:app", "--host", "0.0.0.0", "--port", "8082", "--workers", "4"]

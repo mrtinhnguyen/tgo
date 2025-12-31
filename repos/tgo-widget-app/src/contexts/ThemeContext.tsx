@@ -22,7 +22,7 @@ export function applyExpandedLayout(expanded: boolean) {
   const root = targetDoc.documentElement
   if (!root) return
   try {
-    const maxWidth = expanded ? 'min(70%, 800px)' : '280px'
+    const maxWidth = expanded ? 'min(80%, 800px)' : '360px'
     root.style.setProperty('--bubble-max-width', maxWidth)
   } catch {}
 }
@@ -100,7 +100,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 })
 
 // Helper to apply CSS variables to document root
-function applyThemeToRoot(theme: Theme) {
+function applyThemeToRoot(theme: Theme, isDark: boolean) {
   const targetDoc = getTargetDocument()
   const root = targetDoc.documentElement
   if (!root) return
@@ -122,6 +122,15 @@ function applyThemeToRoot(theme: Theme) {
     root.style.setProperty('--error-color', theme.errorColor)
     // Also update body background
     targetDoc.body.style.background = theme.bgPrimary
+
+    // Toggle .dark class on root element for Emotion styled components
+    if (isDark) {
+      root.classList.add('dark')
+      targetDoc.body.classList.add('dark')
+    } else {
+      root.classList.remove('dark')
+      targetDoc.body.classList.remove('dark')
+    }
   } catch {}
 }
 
@@ -137,12 +146,12 @@ export function ThemeProvider({ initialMode, children }: { initialMode: ThemeMod
 
   // Apply CSS variables whenever mode changes
   useEffect(() => {
-    applyThemeToRoot(theme)
+    applyThemeToRoot(theme, isDark)
     // Notify SDK (parent window) about theme change for launcher styling
     try {
       window.parent?.postMessage({ type: 'tgo:theme-change', isDark: mode === 'dark' }, '*')
     } catch {}
-  }, [theme, mode])
+  }, [theme, mode, isDark])
 
   const value = useMemo(() => ({
     mode,

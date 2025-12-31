@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useCallback } from 'react'
 import styled from '@emotion/styled'
 import type { ChatMessage, SystemMessagePayload, RegularMessagePayload } from '../types/chat'
 import { isSystemMessageType } from '../types/chat'
@@ -73,6 +73,7 @@ export default function MessageList({ messages }: { messages: ChatMessage[] }){
 
   const isAtBottomRef = useRef(true)
   const preHeightRef = useRef<number | null>(null)
+  const prevMessageCountRef = useRef(messages.length)
 
   useEffect(()=>{
     const el = ref.current
@@ -90,23 +91,59 @@ export default function MessageList({ messages }: { messages: ChatMessage[] }){
     return () => el.removeEventListener('scroll', onScroll)
   }, [historyLoading, historyHasMore, loadMore])
 
+  // 滚动到底部的辅助函数
+  const scrollToBottom = useCallback((force = false) => {
+    const el = ref.current
+    if (!el) return
+    
+    // 使用双重 requestAnimationFrame 确保 DOM 完全更新
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (el) {
+          el.scrollTop = el.scrollHeight
+        }
+      })
+    })
+  }, [])
+
   useEffect(()=>{
     const el = ref.current
     if(!el) return
+    
+    const prevCount = prevMessageCountRef.current
+    const currentCount = messages.length
+    prevMessageCountRef.current = currentCount
+    
+    // 加载历史记录时保持滚动位置
     if (preHeightRef.current != null) {
       const delta = el.scrollHeight - preHeightRef.current
       el.scrollTop = delta
       preHeightRef.current = null
-    } else if (isAtBottomRef.current) {
-      el.scrollTop = el.scrollHeight
+      return
     }
-  }, [items])
+    
+    // 新消息到达（发送或接收）时强制滚动到底部
+    if (currentCount > prevCount) {
+      scrollToBottom(true)
+      return
+    }
+    
+    // 消息内容更新（如流式输出）且用户在底部时保持在底部
+    if (isAtBottomRef.current) {
+      scrollToBottom()
+    }
+  }, [items, messages.length, scrollToBottom])
 
   const retry = useChatStore(s => s.retryMessage)
   const retryUpload = useChatStore(s => s.retryUpload)
   const cancelUpload = useChatStore(s => s.cancelUpload)
   const remove = useChatStore(s => s.removeMessage)
   const staffCache = useChatStore(s => s.staffInfoCache)
+  const sendMessage = useChatStore(s => s.sendMessage)
+
+  const handleSendMessage = (msg: string) => {
+    void sendMessage(msg)
+  }
 
 
   return (
@@ -146,7 +183,7 @@ export default function MessageList({ messages }: { messages: ChatMessage[] }){
                 <div style={{ display:'flex', flexDirection:'column', gap: 8, alignItems: 'flex-start' }}>
                   {(payload.content && payload.content.length>0) && (
                     <Bubble self={m.role==='user'}>
-                      <MixedMessage content={payload.content} />
+                      <MixedMessage content={payload.content} onSendMessage={handleSendMessage} />
                     </Bubble>
                   )}
                   {(Array.isArray(payload.images) && payload.images.length>0) && (
@@ -168,7 +205,7 @@ export default function MessageList({ messages }: { messages: ChatMessage[] }){
               ) : m.streamData && m.streamData.length ? (
                 /* Streaming content - show with blinking cursor */
                 <Bubble self={false}>
-                  <TextMessage content={m.streamData} />
+                  <TextMessage content={m.streamData} onSendMessage={handleSendMessage} />
                   <Cursor />
                 </Bubble>
               ) : payload.type === 100 ? (
@@ -179,7 +216,7 @@ export default function MessageList({ messages }: { messages: ChatMessage[] }){
               ) : (
                 <Bubble self={m.role==='user'}>
                   {payload.type === 1 ? (
-                    <TextMessage content={payload.content} />
+                    <TextMessage content={payload.content} onSendMessage={handleSendMessage} />
                   ) : (
                     <div>[消息]</div>
                   )}

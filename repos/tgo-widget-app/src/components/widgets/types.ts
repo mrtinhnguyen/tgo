@@ -45,6 +45,24 @@ export interface WidgetComponentProps<T extends WidgetData = WidgetData> {
 export type WidgetComponent<T extends WidgetData = WidgetData> = React.FC<WidgetComponentProps<T>>;
 
 /**
+ * 工具栏颜色样式配置
+ */
+export interface ToolbarColorStyle {
+  /** 文字颜色 */
+  color: string;
+  /** 背景颜色 */
+  background: string;
+  /** 悬停背景颜色 */
+  hoverBackground: string;
+  /** 深色模式文字颜色 */
+  darkColor: string;
+  /** 深色模式背景颜色 */
+  darkBackground: string;
+  /** 深色模式悬停背景颜色 */
+  darkHoverBackground: string;
+}
+
+/**
  * Widget 定义接口
  * 用于注册新的 Widget 类型
  */
@@ -61,8 +79,8 @@ export interface WidgetDefinition<T extends WidgetData = WidgetData> {
   validate?: (data: unknown) => data is T;
   /** Widget 图标（用于开发模式工具栏） */
   icon?: ReactNode;
-  /** 工具栏按钮颜色类名 */
-  toolbarColor?: string;
+  /** 工具栏按钮颜色样式 */
+  toolbarColor?: ToolbarColorStyle;
 }
 
 /**

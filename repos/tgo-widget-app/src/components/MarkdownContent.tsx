@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useRef, useEffect } from 'react';
 import { Marked, RendererObject, RendererThis, Tokens } from 'marked';
 import { markedHighlight } from "marked-highlight";
 import hljs from 'highlight.js/lib/core';
@@ -26,6 +26,7 @@ import plaintext from 'highlight.js/lib/languages/plaintext';
 import DOMPurify from 'dompurify';
 import { replaceUIWidgetsWithPlaceholders, type ParsedUIBlock } from '../utils/uiWidgetParser';
 import { WidgetRenderer } from './widgets';
+import { imagePreviewManager } from './ImagePreview';
 
 // Register languages
 hljs.registerLanguage('javascript', javascript);
@@ -67,12 +68,12 @@ interface MarkdownContentProps {
 }
 
 const headingClassMap: Record<number, string> = {
-  1: 'text-2xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-600 pb-2',
-  2: 'text-xl font-bold mb-3 mt-5 text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-600 pb-2',
-  3: 'text-lg font-bold mb-2 mt-4 text-gray-900 dark:text-gray-100',
-  4: 'text-base font-bold mb-2 mt-3 text-gray-900 dark:text-gray-100',
-  5: 'text-sm font-bold mb-2 mt-3 text-gray-900 dark:text-gray-100',
-  6: 'text-xs font-bold mb-2 mt-3 text-gray-700 dark:text-gray-300'
+  1: 'text-lg font-semibold mb-2 mt-3 first:mt-0 last:mb-0 text-gray-900 dark:text-gray-100',
+  2: 'text-base font-semibold mb-1.5 mt-2.5 first:mt-0 last:mb-0 text-gray-900 dark:text-gray-100',
+  3: 'text-sm font-semibold mb-1 mt-2 first:mt-0 last:mb-0 text-gray-900 dark:text-gray-100',
+  4: 'text-sm font-medium mb-1 mt-1.5 first:mt-0 last:mb-0 text-gray-900 dark:text-gray-100',
+  5: 'text-xs font-medium mb-0.5 mt-1 first:mt-0 last:mb-0 text-gray-900 dark:text-gray-100',
+  6: 'text-xs font-medium mb-0.5 mt-1 first:mt-0 last:mb-0 text-gray-700 dark:text-gray-300'
 };
 
 const escapeHtml = (value: string): string =>
@@ -108,13 +109,13 @@ const sanitizeHref = (href?: string | null): string => {
 const renderer: RendererObject = {
   heading(this: RendererThis, { tokens, depth }: Tokens.Heading) {
     const html = this.parser.parseInline(tokens);
-    const clz = headingClassMap[depth] || 'font-bold mt-4 mb-2 text-gray-900 dark:text-gray-100';
+    const clz = headingClassMap[depth] || 'font-bold mt-4 mb-2 first:mt-0 last:mb-0 text-gray-900 dark:text-gray-100';
     return `<h${depth} class="${clz}">${html}</h${depth}>`;
   },
-  // paragraph(this: RendererThis, { tokens }: Tokens.Paragraph) {
-  //   const html = this.parser.parseInline(tokens);
-  //   return `<p class="mb-3 leading-relaxed text-gray-800 dark:text-gray-200">${html}</p>`;
-  // },
+  paragraph(this: RendererThis, { tokens }: Tokens.Paragraph) {
+    const html = this.parser.parseInline(tokens);
+    return `<p class="mb-1.5 last:mb-0 leading-normal text-gray-800 dark:text-gray-200">${html}</p>`;
+  },
   link(this: RendererThis, { href, title, tokens }: Tokens.Link) {
     const html = this.parser.parseInline(tokens);
     const safeHref = sanitizeHref(href);
@@ -133,14 +134,14 @@ const renderer: RendererObject = {
           ? `<input type="checkbox" class="mr-2 h-3.5 w-3.5 align-middle rounded border border-gray-300 dark:border-gray-600 text-blue-500 dark:text-blue-400" disabled ${item.checked ? 'checked' : ''} />`
           : '';
 
-        return `<li class="text-gray-800 dark:text-gray-200 leading-relaxed">${checkbox}${content}</li>`;
+        return `<li class="text-gray-800 dark:text-gray-200 leading-normal">${checkbox}${content}</li>`;
       })
       .join('');
     const startAttr = token.ordered && token.start && token.start !== 1 ? ` start="${token.start}"` : '';
     if (token.ordered) {
-      return `<ol${startAttr} class="list-decimal mb-3 space-y-1 ml-6">${itemsHtml}</ol>`;
+      return `<ol${startAttr} class="list-decimal list-outside mb-1.5 first:mt-0 last:mb-0 space-y-0.5 pl-4">${itemsHtml}</ol>`;
     }
-    return `<ul class="list-disc mb-3 space-y-1 ml-6">${itemsHtml}</ul>`;
+    return `<ul class="list-disc list-outside mb-1.5 first:mt-0 last:mb-0 space-y-0.5 pl-4">${itemsHtml}</ul>`;
   },
   blockquote(this: RendererThis, { tokens }: Tokens.Blockquote) {
     const html = this.parser.parse(tokens);
@@ -201,7 +202,7 @@ const renderer: RendererObject = {
   image(this: RendererThis, { href, title, text }: Tokens.Image) {
     const safeSrc = sanitizeHref(href);
     const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
-    return `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(text || '')}"${titleAttr} class="max-w-full h-auto rounded-lg my-3" loading="lazy" />`;
+    return `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(text || '')}"${titleAttr} class="max-w-full h-auto rounded-lg my-2 cursor-pointer hover:opacity-90 transition-opacity markdown-image" data-preview-src="${escapeHtml(safeSrc)}" loading="lazy" />`;
   }
 };
 
@@ -291,7 +292,7 @@ const renderMarkdownToHtml = (markdown: string, allowWidgetPlaceholders = false)
   // Configure DOMPurify
   const sanitizeConfig: any = { 
     USE_PROFILES: { html: true },
-    ADD_ATTR: ['target', 'rel'],
+    ADD_ATTR: ['target', 'rel', 'data-preview-src'],
   };
   
   if (allowWidgetPlaceholders) {
@@ -326,6 +327,8 @@ const MarkdownContent: React.FC<MarkdownContentProps> = ({
   onSendMessage,
   onCopySuccess,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   // 解析 UI Widget 并生成占位符
   const { processedContent, widgetBlocks } = useMemo(() => {
     const { content: processed, blocks } = replaceUIWidgetsWithPlaceholders(content || '');
@@ -348,6 +351,32 @@ const MarkdownContent: React.FC<MarkdownContentProps> = ({
     }
   }, [onWidgetAction]);
 
+  // 处理 Markdown 中图片的点击事件
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'IMG' && target.hasAttribute('data-preview-src')) {
+        const src = target.getAttribute('data-preview-src');
+        if (src) {
+          e.preventDefault();
+          e.stopPropagation();
+          // 收集所有可预览的图片
+          const allImages = Array.from(container.querySelectorAll('img[data-preview-src]'))
+            .map(img => img.getAttribute('data-preview-src'))
+            .filter((s): s is string => !!s);
+          const index = allImages.indexOf(src);
+          imagePreviewManager.open(allImages, index >= 0 ? index : 0);
+        }
+      }
+    };
+
+    container.addEventListener('click', handleClick);
+    return () => container.removeEventListener('click', handleClick);
+  }, [html]);
+
   const combinedClassName = className
     ? `markdown-content ${className}`.trim()
     : 'markdown-content';
@@ -356,6 +385,7 @@ const MarkdownContent: React.FC<MarkdownContentProps> = ({
   if (widgetBlocks.size === 0) {
     return (
       <div
+        ref={containerRef}
         className={combinedClassName}
         dangerouslySetInnerHTML={{ __html: html }}
       />
@@ -364,7 +394,7 @@ const MarkdownContent: React.FC<MarkdownContentProps> = ({
 
   // 有 UI Widget 时，需要将 HTML 分割并插入 Widget 组件
   return (
-    <div className={combinedClassName}>
+    <div ref={containerRef} className={combinedClassName}>
       <MarkdownWithWidgets
         html={html}
         widgetBlocks={widgetBlocks}

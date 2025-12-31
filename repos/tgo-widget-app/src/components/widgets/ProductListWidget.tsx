@@ -3,9 +3,127 @@
  */
 
 import React from 'react';
+import styled from '@emotion/styled';
 import { LayoutGrid, Star } from 'lucide-react';
 import type { WidgetDefinition, WidgetComponentProps, ProductListWidgetData } from './types';
 import { WidgetCard, ActionButtons } from './shared';
+
+/**
+ * 样式组件
+ */
+
+const HeaderBox = styled.div`
+  margin-bottom: 16px;
+`;
+
+const Title = styled.h3`
+  font-weight: 600;
+  font-size: 18px;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+
+  .dark & {
+    color: #f9fafb;
+  }
+`;
+
+const Subtitle = styled.p`
+  font-size: 14px;
+  color: #6b7280;
+  margin: 4px 0 0 0;
+
+  .dark & {
+    color: #9ca3af;
+  }
+`;
+
+const ProductGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+`;
+
+const ProductItem = styled.div`
+  border: 1px solid #f3f4f6;
+  border-radius: 8px;
+  padding: 12px;
+  background-color: #f9fafb;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+
+  &:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  .dark & {
+    border-color: #374151;
+    background-color: rgba(55, 65, 81, 0.5);
+  }
+`;
+
+const ProductThumbnail = styled.img`
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 8px;
+`;
+
+const ProductName = styled.p`
+  font-weight: 500;
+  font-size: 14px;
+  color: #111827;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  .dark & {
+    color: #f9fafb;
+  }
+`;
+
+const ProductMeta = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+`;
+
+const ProductPrice = styled.span`
+  color: #ef4444;
+  font-weight: 600;
+
+  .dark & {
+    color: #f87171;
+  }
+`;
+
+const ProductRating = styled.span`
+  font-size: 12px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  .dark & {
+    color: #9ca3af;
+  }
+`;
+
+const PaginationInfo = styled.p`
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 12px;
+  text-align: center;
+
+  .dark & {
+    color: #9ca3af;
+  }
+`;
 
 /**
  * 产品列表 Widget 组件
@@ -20,53 +138,49 @@ const ProductListWidgetComponent: React.FC<WidgetComponentProps<ProductListWidge
     <WidgetCard>
       {/* 标题 */}
       {(data.title || data.subtitle) && (
-        <div className="mb-4">
+        <HeaderBox>
           {data.title && (
-            <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <LayoutGrid className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <Title>
+              <LayoutGrid size={20} color="#2563eb" />
               {data.title}
-            </h3>
+            </Title>
           )}
           {data.subtitle && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{data.subtitle}</p>
+            <Subtitle>{data.subtitle}</Subtitle>
           )}
-        </div>
+        </HeaderBox>
       )}
 
       {/* 产品网格 */}
-      <div className="grid grid-cols-2 gap-3">
+      <ProductGrid>
         {(data.products || []).map((product, index) => (
-          <div
-            key={index}
-            className="border border-gray-100 dark:border-gray-700 rounded-lg p-3 hover:shadow-md transition-shadow cursor-pointer bg-gray-50 dark:bg-gray-700/50"
-          >
+          <ProductItem key={index}>
             {product.thumbnail && (
-              <img
+              <ProductThumbnail
                 src={product.thumbnail}
                 alt={product.name}
-                className="w-full h-24 object-cover rounded mb-2"
               />
             )}
-            <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{product.name}</p>
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-red-500 dark:text-red-400 font-semibold">¥{product.price}</span>
+            <ProductName>{product.name}</ProductName>
+            <ProductMeta>
+              <ProductPrice>¥{product.price}</ProductPrice>
               {product.rating !== undefined && (
-                <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-0.5">
-                  <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                <ProductRating>
+                  <Star size={12} color="#facc15" fill="#facc15" />
                   {product.rating}
-                </span>
+                </ProductRating>
               )}
-            </div>
-          </div>
+            </ProductMeta>
+          </ProductItem>
         ))}
-      </div>
+      </ProductGrid>
 
       {/* 分页信息 */}
       {data.total_count !== undefined && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-3 text-center">
+        <PaginationInfo>
           共 {data.total_count} 件商品
           {data.has_more && ' · 还有更多'}
-        </p>
+        </PaginationInfo>
       )}
 
       {/* 操作按钮 */}
@@ -78,18 +192,6 @@ const ProductListWidgetComponent: React.FC<WidgetComponentProps<ProductListWidge
       />
     </WidgetCard>
   );
-};
-
-/**
- * 产品列表 Widget 定义
- */
-export const productListWidgetDefinition: WidgetDefinition<ProductListWidgetData> = {
-  type: 'product_list',
-  displayName: '商品列表',
-  description: '显示多个商品的网格列表',
-  component: ProductListWidgetComponent,
-  icon: <LayoutGrid className="w-4 h-4" />,
-  toolbarColor: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-900/50',
 };
 
 export default ProductListWidgetComponent;

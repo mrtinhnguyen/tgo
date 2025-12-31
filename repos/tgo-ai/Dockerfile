@@ -13,7 +13,9 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Install system build dependencies (builder-only)
-RUN apt-get update \
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         git \
@@ -49,7 +51,9 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Minimal runtime dependencies
-RUN apt-get update \
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*

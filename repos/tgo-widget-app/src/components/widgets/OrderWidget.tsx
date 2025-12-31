@@ -3,22 +3,186 @@
  */
 
 import React from 'react';
+import styled from '@emotion/styled';
 import { Package, Truck, MapPin, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import type { WidgetDefinition, WidgetComponentProps, OrderWidgetData, OrderStatus } from './types';
 import { WidgetCard, WidgetHeader, StatusBadge, ActionButtons, InfoRow, formatPrice } from './shared';
 
 /**
+ * 样式组件
+ */
+
+const ProductListContainer = styled.div`
+  border-top: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f3f4f6;
+  padding: 12px 0;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .dark &, .dark-mode & {
+    border-color: #374151;
+  }
+`;
+
+const ProductItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+`;
+
+const ProductInfo = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+`;
+
+const ProductImage = styled.img`
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #f3f4f6;
+
+  .dark &, .dark-mode & {
+    border-color: #4b5563;
+  }
+`;
+
+const ProductName = styled.p`
+  font-weight: 500;
+  color: #111827;
+  margin: 0;
+  font-size: 14px;
+
+  .dark &, .dark-mode & {
+    color: #f3f4f6;
+  }
+`;
+
+const ProductAttributes = styled.p`
+  font-size: 13px;
+  color: #6b7280;
+  margin: 4px 0 0 0;
+
+  .dark &, .dark-mode & {
+    color: #9ca3af;
+  }
+`;
+
+const ProductSKU = styled.p`
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 2px 0 0 0;
+
+  .dark &, .dark-mode & {
+    color: #6b7280;
+  }
+`;
+
+const ProductPriceBox = styled.div`
+  text-align: right;
+  margin-left: 12px;
+`;
+
+const ProductQuantity = styled.p`
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+
+  .dark &, .dark-mode & {
+    color: #9ca3af;
+  }
+`;
+
+const ProductTotalPrice = styled.p`
+  font-weight: 500;
+  color: #111827;
+  margin: 2px 0 0 0;
+  font-size: 14px;
+
+  .dark &, .dark-mode & {
+    color: #f3f4f6;
+  }
+`;
+
+const DiscountRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: #ef4444;
+
+  .dark &, .dark-mode & {
+    color: #f87171;
+  }
+`;
+
+const ShippingInfoBox = styled.div`
+  margin-top: 16px;
+  padding: 16px;
+  background-color: #f9fafb;
+  border-radius: 12px;
+  font-size: 14px;
+
+  .dark &, .dark-mode & {
+    background-color: rgba(55, 65, 81, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+`;
+
+const ShippingFlex = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+`;
+
+const ReceiverInfo = styled.p`
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+
+  .dark &, .dark-mode & {
+    color: #f9fafb;
+  }
+`;
+
+const ShippingAddress = styled.p`
+  color: #4b5563;
+  margin: 6px 0 0 0;
+  line-height: 1.5;
+
+  .dark &, .dark-mode & {
+    color: #d1d5db;
+  }
+`;
+
+const TrackingInfo = styled.div`
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6b7280;
+
+  .dark &, .dark-mode & {
+    color: #9ca3af;
+  }
+`;
+
+/**
  * 订单状态配色映射
  */
 const orderStatusConfig: Record<OrderStatus, { bg: string; text: string; icon: React.ReactNode }> = {
-  pending: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-800 dark:text-yellow-300', icon: <Clock className="w-4 h-4" /> },
-  paid: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-800 dark:text-blue-300', icon: <CheckCircle className="w-4 h-4" /> },
-  processing: { bg: 'bg-indigo-100 dark:bg-indigo-900/30', text: 'text-indigo-800 dark:text-indigo-300', icon: <Package className="w-4 h-4" /> },
-  shipped: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-800 dark:text-purple-300', icon: <Truck className="w-4 h-4" /> },
-  delivered: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', icon: <CheckCircle className="w-4 h-4" /> },
-  completed: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', icon: <CheckCircle className="w-4 h-4" /> },
-  cancelled: { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-800 dark:text-gray-300', icon: <XCircle className="w-4 h-4" /> },
-  refunded: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-300', icon: <AlertCircle className="w-4 h-4" /> },
+  pending: { bg: '#fef9c3', text: '#854d0e', icon: <Clock size={16} /> },
+  paid: { bg: '#dbeafe', text: '#1e40af', icon: <CheckCircle size={16} /> },
+  processing: { bg: '#e0e7ff', text: '#3730a3', icon: <Package size={16} /> },
+  shipped: { bg: '#f3e8ff', text: '#6b21a8', icon: <Truck size={16} /> },
+  delivered: { bg: '#dcfce7', text: '#166534', icon: <CheckCircle size={16} /> },
+  completed: { bg: '#dcfce7', text: '#166534', icon: <CheckCircle size={16} /> },
+  cancelled: { bg: '#f3f4f6', text: '#374151', icon: <XCircle size={16} /> },
+  refunded: { bg: '#fee2e2', text: '#991b1b', icon: <AlertCircle size={16} /> },
 };
 
 /**
@@ -37,10 +201,10 @@ const OrderWidgetComponent: React.FC<WidgetComponentProps<OrderWidgetData>> = ({
     <WidgetCard>
       {/* 头部 */}
       <WidgetHeader
-        icon={<Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
-        iconBgColor="bg-blue-50 dark:bg-blue-900/30"
+        icon={<Package size={20} color="#2563eb" />}
+        iconBgColor="#eff6ff"
         subtitle="订单号"
-        title={<span className="font-mono">{data.order_id}</span>}
+        title={<span style={{ fontFamily: 'monospace' }}>{data.order_id}</span>}
         badge={
           <StatusBadge bgColor={statusStyle.bg} textColor={statusStyle.text} icon={statusStyle.icon}>
             {data.status_text || data.status}
@@ -49,74 +213,73 @@ const OrderWidgetComponent: React.FC<WidgetComponentProps<OrderWidgetData>> = ({
       />
 
       {/* 商品列表 */}
-      <div className="border-t border-b border-gray-100 dark:border-gray-700 py-3 my-3 space-y-3">
+      <ProductListContainer>
         {(data.items || []).map((item, index) => (
-          <div key={index} className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
+          <ProductItem key={index}>
+            <ProductInfo>
               {item.image && (
-                <img
+                <ProductImage
                   src={item.image.url}
                   alt={item.image.alt || item.name}
-                  className="w-14 h-14 object-cover rounded-lg border border-gray-100 dark:border-gray-700"
                 />
               )}
               <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">{item.name}</p>
+                <ProductName>{item.name}</ProductName>
                 {item.attributes && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <ProductAttributes>
                     {Object.entries(item.attributes).map(([k, v]) => `${k}: ${v}`).join(' | ')}
-                  </p>
+                  </ProductAttributes>
                 )}
                 {item.sku && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">SKU: {item.sku}</p>
+                  <ProductSKU>SKU: {item.sku}</ProductSKU>
                 )}
               </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500 dark:text-gray-400">×{item.quantity}</p>
-              <p className="font-medium text-gray-900 dark:text-gray-100">{formatPrice(item.total_price, currency)}</p>
-            </div>
-          </div>
+            </ProductInfo>
+            <ProductPriceBox>
+              <ProductQuantity>×{item.quantity}</ProductQuantity>
+              <ProductTotalPrice>{formatPrice(item.total_price, currency)}</ProductTotalPrice>
+            </ProductPriceBox>
+          </ProductItem>
         ))}
-      </div>
+      </ProductListContainer>
 
       {/* 金额信息 */}
-      <div className="space-y-2">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <InfoRow label="商品小计" value={formatPrice(data.subtotal, currency)} />
         {data.shipping_fee !== undefined && data.shipping_fee > 0 && (
           <InfoRow label="运费" value={formatPrice(data.shipping_fee, currency)} />
         )}
         {data.discount !== undefined && data.discount > 0 && (
-          <div className="flex justify-between text-sm text-red-500 dark:text-red-400">
+          <DiscountRow>
             <span>优惠</span>
             <span>-{formatPrice(data.discount, currency)}</span>
-          </div>
+          </DiscountRow>
         )}
         <InfoRow label="合计" value={formatPrice(data.total, currency)} highlight />
       </div>
 
       {/* 收货信息 */}
       {data.shipping_address && (
-        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm">
-          <div className="flex items-start gap-2">
-            <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+        <ShippingInfoBox>
+          <ShippingFlex>
+            <MapPin size={16} color="#9ca3af" style={{ marginTop: '2px', flexShrink: 0 }} />
             <div>
-              <p className="font-medium text-gray-900 dark:text-gray-100">
+              <ReceiverInfo>
                 {data.receiver_name} {data.receiver_phone}
-              </p>
-              <p className="text-gray-600 dark:text-gray-400">{data.shipping_address}</p>
+              </ReceiverInfo>
+              <ShippingAddress>{data.shipping_address}</ShippingAddress>
             </div>
-          </div>
-        </div>
+          </ShippingFlex>
+        </ShippingInfoBox>
       )}
 
       {/* 物流信息 */}
       {data.tracking_number && (
-        <div className="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <Truck className="w-4 h-4" />
+        <TrackingInfo>
+          <Truck size={16} />
           <span>{data.carrier}</span>
-          <span className="font-mono">{data.tracking_number}</span>
-        </div>
+          <span style={{ fontFamily: 'monospace' }}>{data.tracking_number}</span>
+        </TrackingInfo>
       )}
 
       {/* 操作按钮 */}
@@ -128,18 +291,6 @@ const OrderWidgetComponent: React.FC<WidgetComponentProps<OrderWidgetData>> = ({
       />
     </WidgetCard>
   );
-};
-
-/**
- * 订单 Widget 定义
- */
-export const orderWidgetDefinition: WidgetDefinition<OrderWidgetData> = {
-  type: 'order',
-  displayName: '订单卡片',
-  description: '显示订单详情、商品列表、价格和状态',
-  component: OrderWidgetComponent,
-  icon: <Package className="w-4 h-4" />,
-  toolbarColor: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50',
 };
 
 export default OrderWidgetComponent;

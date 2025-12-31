@@ -418,8 +418,12 @@ async def chat_completion(req: ChatCompletionRequest, db: Session = Depends(get_
     # Prepare agent_ids from platform
     platform_agent_ids = [str(aid) for aid in platform.agent_ids] if platform.agent_ids else None
 
-    # 8) If wukongim_only=True, process in background and return immediately
+    # 8) If wukongim_only=True, start background processing and wait for team_run_started
     if req.wukongim_only:
+        # Create an event to signal when AI processing has started
+        started_event = asyncio.Event()
+        
+        # Start background task with the event
         asyncio.create_task(chat_service.run_background_ai_interaction(
             project_id=str(project.id),
             visitor_id=str(visitor.id),
@@ -433,12 +437,29 @@ async def chat_completion(req: ChatCompletionRequest, db: Session = Depends(get_
             system_message=req.system_message,
             expected_output=req.expected_output,
             agent_ids=platform_agent_ids,
+            started_event=started_event,
         ))
+        
+        # Wait for team_run_started event (with timeout)
+        try:
+            await asyncio.wait_for(started_event.wait(), timeout=req.timeout_seconds or 30)
+        except asyncio.TimeoutError:
+            error_data = {
+                "success": False,
+                "event_type": "error",
+                "message": "AI processing start timeout",
+                "visitor_id": str(visitor.id),
+            }
+            if req.stream is False:
+                return error_data
+            async def timeout_gen():
+                yield chat_service.sse_format({"event_type": "error", "data": error_data})
+            return StreamingResponse(timeout_gen(), media_type="text/event-stream")
         
         accepted_data = {
             "success": True,
             "event_type": "accepted",
-            "message": "Request accepted, processing in background",
+            "message": "Request accepted, AI processing started",
             "visitor_id": str(visitor.id),
         }
         if req.stream is False:
@@ -1184,101 +1205,3 @@ async def staff_team_chat(
 # ============================================================================
 # Helper Functions (Internal)
 # ============================================================================
-
-
-@router.post(
-    "/team",
-    response_model=StaffTeamChatResponse,
-    summary="Staff chat with AI team or agent",
-    tags=["Chat"],
-    description="""
-    Staff-to-team/agent chat endpoint.
-
-    This endpoint allows authenticated staff members to chat with AI teams or agents.
-    The AI response is delivered via WuKongIM to the client.
-
-    **Authentication**: JWT token required (staff authentication).
-
-    **Request**: Either `team_id` or `agent_id` must be provided (exactly one).
-
-    **Channel Format**:
-    - If `team_id` is provided: channel_id = `{team_id}-team`
-    - If `agent_id` is provided: channel_id = `{agent_id}-agent`
-
-    **Response Delivery**: AI response is sent via WuKongIM, not returned in this endpoint.
-    This endpoint returns success/failure status after initiating AI processing.
-    """,
-)
-async def staff_team_chat(
-    req: StaffTeamChatRequest,
-    db: Session = Depends(get_db),
-    current_user: Staff = Depends(require_permission("chat:send")),
-) -> StaffTeamChatResponse:
-    """Staff chat with AI team or agent. Requires chat:send permission.
-
-    - Auth: JWT token (staff authentication)
-    - Behavior: Directly calls AI service and forwards response to WuKongIM
-    - Output: Success/failure status (AI response delivered via WuKongIM)
-    """
-    # 1) Get project info
-    project = current_user.project
-    if not project or not project.api_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Staff is not linked to a valid project"
-        )
-
-    # 2) Build channel identifiers based on team_id or agent_id
-    if req.team_id:
-        channel_id = f"{req.team_id}-team"
-        target_team_id = str(req.team_id)
-        target_agent_id = None
-    else:
-        channel_id = f"{req.agent_id}-agent"
-        target_team_id = str(project.default_team_id) if project.default_team_id else None
-        target_agent_id = str(req.agent_id)
-
-    channel_type = 1  # Personal channel type
-
-    # 3) Prepare correlation and session IDs
-    client_msg_no = f"staff_team_{uuid4().hex}"
-    session_id = f"{channel_id}@{channel_type}"
-
-    # 4) Build from_uid for staff
-    staff_uid = f"{current_user.id}-staff"
-
-    # 4.1) Forward a copy of staff message to WuKongIM (best-effort)
-    await chat_service.send_user_message_to_wukongim(
-        from_uid=staff_uid,
-        channel_id=channel_id,
-        channel_type=channel_type,
-        content=req.message,
-        extra=None,
-    )
-
-    # 5) Directly call AI service and forward to WuKongIM in background
-    # AI result sender should be team/agent (not current staff)
-    ai_sender_uid = channel_id
-    
-    asyncio.create_task(chat_service.run_background_ai_interaction(
-        project_id=str(current_user.project_id),
-        visitor_id=staff_uid,
-        message=req.message,
-        channel_id=staff_uid,
-        channel_type=channel_type,
-        client_msg_no=client_msg_no,
-        from_uid=ai_sender_uid,
-        session_id=session_id,
-        team_id=target_team_id,
-        system_message=req.system_message,
-        expected_output=req.expected_output,
-        agent_id=target_agent_id,
-        agent_ids=None,
-    ))
-
-    # 6) Return success response immediately
-    return StaffTeamChatResponse(
-        success=True,
-        message="Request accepted, processing in background",
-        client_msg_no=client_msg_no,
-    )

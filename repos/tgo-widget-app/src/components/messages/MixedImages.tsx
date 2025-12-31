@@ -1,16 +1,23 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import ImageMessage from './ImageMessage'
 import { Grid, GridImg, GridItem } from './messageStyles'
 import { getGridLayout } from './messageUtils'
+import { imagePreviewManager } from '../ImagePreview'
 
 export interface MixedImagesProps {
   images: Array<{ url: string; width: number; height: number }>
 }
 
-function SquareItem({ url, moreCount = 0 }: { url: string; moreCount?: number }){
+interface SquareItemProps {
+  url: string
+  moreCount?: number
+  onClick: () => void
+}
+
+function SquareItem({ url, moreCount = 0, onClick }: SquareItemProps){
   const [error, setError] = useState(false)
   return (
-    <GridItem onClick={()=>{ try { window.open(url, '_blank') } catch {} }} title={moreCount>0?`+${moreCount}`:'点击查看原图'}>
+    <GridItem onClick={onClick} title={moreCount>0?`+${moreCount}`:'点击查看大图'}>
       {!error ? (
         <GridImg src={url} alt="[图片]" loading="lazy" onError={()=>setError(true)} />
       ) : (
@@ -31,15 +38,34 @@ export default function MixedImages({ images }: MixedImagesProps){
   const more = imgs.length - visible.length
   const layout = getGridLayout(visible.length)
   const isSingle = visible.length === 1
+
+  // 所有图片的 URL 列表
+  const allImageUrls = useMemo(() => imgs.map(img => img.url), [imgs])
+
+  const handleImageClick = (index: number) => {
+    imagePreviewManager.open(allImageUrls, index)
+  }
+
   if (visible.length === 0) return null
   return (
     <div style={{ width: 'auto', maxWidth: 'var(--bubble-max-width, 280px)' }}>
       {isSingle ? (
-        <ImageMessage url={visible[0].url} w={visible[0].width} h={visible[0].height} />
+        <ImageMessage 
+          url={visible[0].url} 
+          w={visible[0].width} 
+          h={visible[0].height}
+          allImages={allImageUrls}
+          imageIndex={0}
+        />
       ) : (
         <Grid style={{ gridTemplateColumns: `repeat(${layout.cols}, 1fr)` }}>
           {visible.map((img, idx) => (
-            <SquareItem key={idx} url={img.url} moreCount={idx === visible.length - 1 ? Math.max(0, more) : 0} />
+            <SquareItem 
+              key={idx} 
+              url={img.url} 
+              moreCount={idx === visible.length - 1 ? Math.max(0, more) : 0}
+              onClick={() => handleImageClick(idx)}
+            />
           ))}
         </Grid>
       )}

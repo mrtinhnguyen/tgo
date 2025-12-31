@@ -3,9 +3,105 @@
  */
 
 import React from 'react';
+import styled from '@emotion/styled';
 import { Table2 } from 'lucide-react';
 import type { WidgetDefinition, WidgetComponentProps, PriceComparisonWidgetData } from './types';
 import { WidgetCard, ActionButtons } from './shared';
+
+/**
+ * 样式组件
+ */
+
+const WidgetTitle = styled.h3`
+  font-weight: 600;
+  font-size: 18px;
+  color: #111827;
+  margin-bottom: 16px;
+  margin-top: 0;
+
+  .dark & {
+    color: #f9fafb;
+  }
+`;
+
+const TableWrapper = styled.div`
+  overflow-x: auto;
+  margin-left: -8px;
+  margin-right: -8px;
+`;
+
+const StyledTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 100%;
+`;
+
+const Th = styled.th`
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+
+  .dark & {
+    color: #f9fafb;
+    background-color: #374151;
+    border-color: #4b5563;
+  }
+`;
+
+const Td = styled.td<{ recommended?: boolean }>`
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #e5e7eb;
+  color: ${props => props.recommended ? '#166534' : '#374151'};
+
+  .dark & {
+    border-color: #4b5563;
+    color: ${props => props.recommended ? '#86efac' : '#d1d5db'};
+  }
+`;
+
+const Tr = styled.tr<{ recommended?: boolean }>`
+  background-color: ${props => props.recommended ? '#f0fdf4' : 'transparent'};
+
+  .dark & {
+    background-color: ${props => props.recommended ? 'rgba(20, 83, 45, 0.2)' : 'transparent'};
+  }
+`;
+
+const RecommendedBadge = styled.span`
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: #dcfce7;
+  color: #15803d;
+
+  .dark & {
+    background-color: #064e3b;
+    color: #a7f3d0;
+  }
+`;
+
+const RecommendationReason = styled.p`
+  margin-top: 12px;
+  font-size: 14px;
+  color: #16a34a;
+  display: flex;
+  align-items: start;
+  gap: 6px;
+  margin-bottom: 0;
+
+  .dark & {
+    color: #4ade80;
+  }
+`;
 
 /**
  * 价格对比 Widget 组件
@@ -20,63 +116,52 @@ const PriceComparisonWidgetComponent: React.FC<WidgetComponentProps<PriceCompari
     <WidgetCard>
       {/* 标题 */}
       {data.title && (
-        <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100 mb-4">{data.title}</h3>
+        <WidgetTitle>{data.title}</WidgetTitle>
       )}
 
       {/* 表格 */}
-      <div className="overflow-x-auto -mx-2">
-        <table className="w-full border-collapse min-w-full">
+      <TableWrapper>
+        <StyledTable>
           <thead>
             <tr>
               {(data.columns || []).map((col, i) => (
-                <th
-                  key={i}
-                  className="px-3 py-2 text-left text-sm font-semibold text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600"
-                >
+                <Th key={i}>
                   {col}
-                </th>
+                </Th>
               ))}
             </tr>
           </thead>
           <tbody>
             {(data.items || []).map((item, i) => (
-              <tr
+              <Tr
                 key={i}
-                className={`${
-                  i === data.recommended_index
-                    ? 'bg-green-50 dark:bg-green-900/20'
-                    : ''
-                }`}
+                recommended={i === data.recommended_index}
               >
                 {(data.columns || []).map((col, j) => (
-                  <td
+                  <Td
                     key={j}
-                    className={`px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 ${
-                      i === data.recommended_index
-                        ? 'text-green-800 dark:text-green-300'
-                        : 'text-gray-700 dark:text-gray-300'
-                    }`}
+                    recommended={i === data.recommended_index}
                   >
                     {item[col]}
                     {i === data.recommended_index && j === 0 && (
-                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200">
+                      <RecommendedBadge>
                         推荐
-                      </span>
+                      </RecommendedBadge>
                     )}
-                  </td>
+                  </Td>
                 ))}
-              </tr>
+              </Tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </StyledTable>
+      </TableWrapper>
 
       {/* 推荐原因 */}
       {data.recommendation_reason && (
-        <p className="mt-3 text-sm text-green-600 dark:text-green-400 flex items-start gap-1.5">
-          <span className="text-base">💡</span>
+        <RecommendationReason>
+          <span style={{ fontSize: '16px' }}>💡</span>
           <span>{data.recommendation_reason}</span>
-        </p>
+        </RecommendationReason>
       )}
 
       {/* 操作按钮 */}
@@ -88,18 +173,6 @@ const PriceComparisonWidgetComponent: React.FC<WidgetComponentProps<PriceCompari
       />
     </WidgetCard>
   );
-};
-
-/**
- * 价格对比 Widget 定义
- */
-export const priceComparisonWidgetDefinition: WidgetDefinition<PriceComparisonWidgetData> = {
-  type: 'price_comparison',
-  displayName: '价格对比',
-  description: '以表格形式对比不同选项的价格',
-  component: PriceComparisonWidgetComponent,
-  icon: <Table2 className="w-4 h-4" />,
-  toolbarColor: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 hover:bg-teal-100 dark:hover:bg-teal-900/50',
 };
 
 export default PriceComparisonWidgetComponent;
