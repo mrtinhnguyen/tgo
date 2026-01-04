@@ -1446,7 +1446,31 @@ cmd_upgrade() {
   echo ""
   echo "[INFO] Pulling latest code from git..."
   [ "$use_cn" = "true" ] && echo "[INFO] Using Gitee mirrors for git operations"
+  
+  # Calculate checksum before pull to detect if script itself changes
+  local script_path="$0"
+  local md5_before=""
+  if command -v md5sum >/dev/null 2>&1; then
+    md5_before=$(md5sum "$script_path" | cut -d' ' -f1)
+  elif command -v md5 >/dev/null 2>&1; then
+    md5_before=$(md5 -q "$script_path")
+  fi
+
   git pull || echo "[WARN] git pull failed, continuing with existing code"
+
+  # Check if script itself was updated
+  local md5_after=""
+  if command -v md5sum >/dev/null 2>&1; then
+    md5_after=$(md5sum "$script_path" | cut -d' ' -f1)
+  elif command -v md5 >/dev/null 2>&1; then
+    md5_after=$(md5 -q "$script_path")
+  fi
+
+  if [ -n "$md5_before" ] && [ "$md5_before" != "$md5_after" ]; then
+    echo "[INFO] tgo.sh has been updated. Re-executing with the new version..."
+    # Preserve all original arguments
+    exec bash "$script_path" upgrade "$@"
+  fi
 
   # Update submodules if present
   if [ -f ".gitmodules" ]; then
