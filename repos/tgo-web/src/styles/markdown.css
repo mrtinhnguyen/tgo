@@ -205,8 +205,8 @@
 }
 
 .markdown-white pre {
-  background-color: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .markdown-white pre code {
@@ -329,4 +329,110 @@
 
 .markdown-white ::selection {
   background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Highlight.js syntax highlighting for white text on blue background */
+.markdown-white .hljs {
+  color: white;
+  background: transparent;
+}
+
+.markdown-white .hljs-comment,
+.markdown-white .hljs-quote {
+  color: rgba(255, 255, 255, 0.65);
+  font-style: italic;
+}
+
+.markdown-white .hljs-keyword,
+.markdown-white .hljs-selector-tag,
+.markdown-white .hljs-type {
+  color: #ffd6a5;
+}
+
+.markdown-white .hljs-string,
+.markdown-white .hljs-addition {
+  color: #b5f5b5;
+}
+
+.markdown-white .hljs-number,
+.markdown-white .hljs-literal {
+  color: #a5e3ff;
+}
+
+.markdown-white .hljs-built_in,
+.markdown-white .hljs-builtin-name {
+  color: #ffe6a5;
+}
+
+.markdown-white .hljs-function,
+.markdown-white .hljs-title,
+.markdown-white .hljs-title.function_,
+.markdown-white .hljs-title.class_,
+.markdown-white .hljs-function .hljs-title {
+  color: #ffeb99;
+}
+
+.markdown-white .hljs-attr,
+.markdown-white .hljs-variable,
+.markdown-white .hljs-template-variable {
+  color: #a5e3ff;
+}
+
+.markdown-white .hljs-class .hljs-title,
+.markdown-white .hljs-title.class_ {
+  color: #ffe6a5;
+}
+
+.markdown-white .hljs-params {
+  color: white;
+}
+
+.markdown-white .hljs-regexp {
+  color: #b5f5b5;
+}
+
+.markdown-white .hljs-symbol,
+.markdown-white .hljs-bullet {
+  color: #ffe6a5;
+}
+
+.markdown-white .hljs-meta {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.markdown-white .hljs-deletion {
+  color: #ffb5b5;
+  background-color: rgba(255, 100, 100, 0.2);
+}
+
+.markdown-white .hljs-addition {
+  color: #b5ffb5;
+  background-color: rgba(100, 255, 100, 0.15);
+}
+
+.markdown-white .hljs-selector-class,
+.markdown-white .hljs-selector-id {
+  color: #b5ffb5;
+}
+
+.markdown-white .hljs-emphasis {
+  font-style: italic;
+}
+
+.markdown-white .hljs-strong {
+  font-weight: bold;
+}
+
+/* Additional function/method name styles for better visibility */
+.markdown-white .hljs-name,
+.markdown-white .hljs-section,
+.markdown-white .hljs-tag {
+  color: #ffeb99;
+}
+
+/* Ensure function titles have high priority */
+.markdown-white pre code .hljs-title,
+.markdown-white pre code .hljs-title.function_,
+.markdown-white pre code .hljs-function .hljs-title {
+  color: #ffeb99 !important;
 }
