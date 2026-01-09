@@ -41,6 +41,8 @@ export function formatChatLastMessage(chat: Chat, t: TFunction): string {
           t('chat.messages.system.sessionClosed', 'Session ended. Agent {0} has completed the service.'),
           payload.extra
         );
+      case MessagePayloadType.MEMORY_CLEARED:
+        return t('chat.messages.system.memoryCleared', 'Memory cleared, AI will restart the conversation');
       default:
         // For other system messages, use the template from payload or fallback to lastMessage
         if (payload.content) {

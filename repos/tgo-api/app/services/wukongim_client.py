@@ -45,6 +45,7 @@ class MessageType:
     STAFF_ASSIGNED = 1000
     SESSION_CLOSED = 1001
     SESSION_TRANSFERRED = 1002
+    MEMORY_CLEARED = 1003
 
 
 class EventType:
@@ -549,6 +550,61 @@ class WuKongIMClient:
             client_msg_no=client_msg_no or str(uuid4()),
         )
 
+    async def send_system_message(
+        self,
+        *,
+        channel_id: str,
+        channel_type: int,
+        content: str,
+        msg_type: int,
+        from_uid: Optional[str] = None,
+        extra: Optional[Any] = None,
+        client_msg_no: Optional[str] = None,
+    ) -> Optional[WuKongIMMessageSendResponse]:
+        """Send a general system message.
+
+        Args:
+            channel_id: Channel ID
+            channel_type: Channel type
+            content: Message text content
+            msg_type: Message type (from MessageType class)
+            from_uid: Sender UID (optional)
+            extra: Optional extra JSON data
+            client_msg_no: Optional client-provided message ID
+
+        Returns:
+            WuKongIMMessageSendResponse or None if disabled
+        """
+        if not self.enabled:
+            logger.debug("WuKongIM integration is disabled; skipping send_system_message")
+            return None
+
+        # Build payload for system message
+        payload: Dict[str, Any] = {
+            "type": msg_type,
+            "content": content,
+        }
+        if extra:
+            payload["extra"] = extra
+
+        logger.info(
+            "Sending system message",
+            extra={
+                "from_uid": from_uid,
+                "channel_id": channel_id,
+                "channel_type": channel_type,
+                "msg_type": msg_type,
+            }
+        )
+
+        return await self.send_message(
+            payload=payload,
+            from_uid=from_uid,
+            channel_id=channel_id,
+            channel_type=channel_type,
+            client_msg_no=client_msg_no or str(uuid4()),
+        )
+
     async def send_visitor_profile_updated(
         self,
         *,
@@ -702,6 +758,51 @@ class WuKongIMClient:
         except Exception as e:
             # 404 means no messages, return None
             logger.debug(f"Failed to get channel last message: {e}")
+            return None
+
+    async def get_channel_max_message_seq(
+        self,
+        *,
+        channel_id: str,
+        channel_type: int,
+        login_uid: str,
+    ) -> Optional[int]:
+        """Get the max message sequence number for a channel.
+
+        Args:
+            channel_id: Channel ID
+            channel_type: Channel type
+            login_uid: Login user ID
+
+        Returns:
+            Max message sequence number or None if failed
+        """
+        if not self.enabled:
+            logger.debug("WuKongIM integration is disabled; skipping get_channel_max_message_seq")
+            return None
+
+        params = {
+            "channel_id": channel_id,
+            "channel_type": channel_type,
+            "login_uid": login_uid,
+        }
+
+        logger.debug(
+            "Getting channel max message seq",
+            extra={
+                "channel_id": channel_id,
+                "channel_type": channel_type,
+                "login_uid": login_uid,
+            }
+        )
+
+        try:
+            response = await self._make_request("GET", "/channel/max_message_seq", params=params)
+            if response and "message_seq" in response:
+                return response["message_seq"]
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get channel max message seq: {e}")
             return None
 
     async def get_message_by_client_msg_no(

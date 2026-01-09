@@ -205,7 +205,7 @@ async def forward_ai_event_to_wukongim(
 
 async def process_ai_stream_to_wukongim(
     project_id: str,
-    visitor_id: str,
+    user_id: str,
     message: str,
     channel_id: str,
     channel_type: int,
@@ -231,7 +231,7 @@ async def process_ai_stream_to_wukongim(
             team_id=team_id,
             agent_id=agent_id,
             agent_ids=agent_ids,
-            user_id=visitor_id,
+            user_id=user_id,
             message=message,
             session_id=session_id,
             enable_memory=True,
@@ -267,7 +267,6 @@ async def process_ai_stream_to_wukongim(
         )
         yield {"event_type": "workflow_failed", "data": error_data}
     
-    print(f"full_content----->: {full_content}")
 
 
 async def handle_ai_response_non_stream(
@@ -332,7 +331,7 @@ async def handle_ai_response_non_stream(
 
 async def run_background_ai_interaction(
     project_id: str,
-    visitor_id: str,
+    user_id: str,
     message: str,
     channel_id: str,
     channel_type: int,
@@ -353,7 +352,7 @@ async def run_background_ai_interaction(
     """
     async for event_payload in process_ai_stream_to_wukongim(
         project_id=project_id,
-        visitor_id=visitor_id,
+        user_id=user_id,
         message=message,
         channel_id=channel_id,
         channel_type=channel_type,

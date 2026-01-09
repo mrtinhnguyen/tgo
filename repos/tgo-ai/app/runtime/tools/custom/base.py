@@ -40,10 +40,6 @@ class ToolContext:
             metadata["project_id"] = self.project_id
         return metadata
 
-    @property
-    def visitor_id(self) -> Optional[str]:
-        """Get visitor_id as validated UUID string."""
-        return uuid_or_none(self.user_id)
 
 
 def uuid_or_none(value: Optional[str]) -> Optional[str]:
@@ -102,7 +98,7 @@ class EventClient:
 
         event_payload = {
             "event_type": event_type,
-            "visitor_id": self.ctx.visitor_id,
+            "user_id": self.ctx.user_id,
             "payload": {
                 **payload,
                 "session_id": self.ctx.session_id,

@@ -691,6 +691,7 @@ export enum MessagePayloadType {
   SYSTEM_STAFF_ASSIGNED = 1000,  // 已分配到客服
   SYSTEM_SESSION_CLOSED = 1001,  // 会话关闭
   SESSION_TRANSFERRED = 1002,  // 会话转接
+  MEMORY_CLEARED = 1003, // 清除记忆
   SYSTEM_MAX = 2000,
 }
 

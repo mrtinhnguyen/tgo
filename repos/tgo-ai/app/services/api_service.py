@@ -31,7 +31,7 @@ class APIServiceClient:
             plugin_id: Unique plugin ID
             tool_name: Name of the tool to execute
             arguments: Tool arguments from LLM
-            context: Context containing visitor_id, session_id, agent_id, etc.
+            context: Context containing user_id, session_id, agent_id, etc.
 
         Returns:
             Tool result dictionary

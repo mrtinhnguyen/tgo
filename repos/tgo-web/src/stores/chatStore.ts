@@ -53,6 +53,7 @@ interface ChatState {
   getFilteredChats: () => Chat[];
   getChatById: (chatId: string) => Chat | undefined;
   updateConversationLastMessage: (channelId: string, channelType: number, message: Message) => void;
+  updateConversationPreview: (channelId: string, channelType: number, content: string) => void;
   moveConversationToTop: (channelId: string, channelType: number) => void;
   incrementUnreadCount: (channelId: string, channelType: number) => void;
   clearConversationUnread: (channelId: string, channelType: number) => Promise<void>;
@@ -77,6 +78,7 @@ interface ChatState {
   addMessage: (message: Message) => void;
   updateMessageByClientMsgNo: (clientMsgNo: string, patch: Partial<Message>) => void;
   loadMessages: (chatId: string) => Promise<void>;
+  setMessages: (messages: Message[]) => void;
   setLoading: (loading: boolean) => void;
   setSending: (sending: boolean) => void;
   loadHistoricalMessages: (channelId: string, channelType: number) => Promise<void>;
@@ -185,6 +187,10 @@ export const useChatStore = create<ChatState>()(
             useConversationStore.getState().setSearchQuery(query);
             set({ searchQuery: query }, false, 'setSearchQuery');
           },
+          updateConversationPreview: (channelId, channelType, content) => {
+            useConversationStore.getState().updateConversationPreview(channelId, channelType, content);
+            set({ chats: useConversationStore.getState().chats }, false, 'updateConversationPreview');
+          },
           createChat: (visitorName, platform) => {
             useConversationStore.getState().createChat(visitorName, platform);
             set({ chats: useConversationStore.getState().chats }, false, 'createChat');
@@ -236,6 +242,10 @@ export const useChatStore = create<ChatState>()(
           loadMessages: async (chatId) => {
             await useMessageStore.getState().loadMessages(chatId);
             set({ messages: useMessageStore.getState().messages, isLoading: useMessageStore.getState().isLoading }, false, 'loadMessages');
+          },
+          setMessages: (messages) => {
+            useMessageStore.getState().setMessages(messages);
+            set({ messages }, false, 'setMessages');
           },
           setLoading: (loading) => {
             useMessageStore.getState().setLoading(loading);

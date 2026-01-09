@@ -228,7 +228,7 @@ def create_plugin_tool(
 
     async def plugin_tool_entrypoint(**tool_args: Any) -> Any:
         context = {
-            "visitor_id": user_id,
+            "user_id": user_id,
             "session_id": session_id,
             "agent_id": agent_id,
         }

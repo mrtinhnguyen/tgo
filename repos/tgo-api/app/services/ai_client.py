@@ -569,6 +569,20 @@ class AIServiceClient:
         return await self._handle_response(response)
 
 
+    async def clear_session_memory(
+        self,
+        project_id: str,
+        session_id: str,
+        user_id: Optional[str] = None,
+    ) -> None:
+        """Clear memory for a session in the AI service."""
+        response = await self._make_request(
+            "DELETE",
+            f"/api/v1/agents/sessions/{session_id}/memory",
+            params={"project_id": project_id, "user_id": user_id},
+        )
+        return await self._handle_response(response)
+
     # Tools endpoints
     async def list_tools(
         self,

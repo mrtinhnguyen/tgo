@@ -29,6 +29,7 @@ from app.models.visitor_waiting_queue import (
     QueueUrgency,
     URGENCY_PRIORITY_MAP,
 )
+from app.models.channel_memory_clearance import ChannelMemoryClearance, ClearanceUserType
 
 __all__ = [
     # Models
@@ -62,6 +63,7 @@ __all__ = [
     "VisitorSession",
     "VisitorWaitingQueue",
     "URGENCY_PRIORITY_MAP",
+    "ChannelMemoryClearance",
     # Enums
     "PlatformType",
     "StaffRole",
@@ -72,4 +74,5 @@ __all__ = [
     "QueueSource",
     "QueueUrgency",
     "TagCategory",
+    "ClearanceUserType",
 ]

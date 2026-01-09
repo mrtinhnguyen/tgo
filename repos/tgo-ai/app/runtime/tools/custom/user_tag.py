@@ -1,4 +1,4 @@
-"""Team-level tool to add tags to visitors."""
+"""Team-level tool to add tags to users."""
 
 from __future__ import annotations
 
@@ -9,30 +9,30 @@ from agno.tools import Function
 from .base import EventClient, ToolContext
 
 
-def create_visitor_tag_tool(
+def create_user_tag_tool(
     *,
     team_id: str,
     session_id: str | None,
     user_id: str | None,
     project_id: str | None = None,
 ) -> Function:
-    """Create a team-level tool that adds tags to visitors."""
+    """Create a team-level tool that adds tags to users."""
     ctx = ToolContext(team_id, session_id, user_id, project_id)
     client = EventClient(ctx)
 
     error_messages = {
-        "not_configured": "抱歉，当前无法为访客添加标签，我们已记录该问题并会尽快处理。请稍后再试或直接联系客服。",
-        "api_error": "抱歉，访客标签添加未能成功提交。请稍后重试或联系技术支持。",
-        "http_error": "抱歉，网络异常导致访客标签添加未能提交。请稍后重试或联系技术支持。",
-        "unexpected_error": "抱歉，出现异常，暂时无法为访客添加标签。请稍后重试或联系技术支持。",
+        "not_configured": "抱歉，当前无法为用户添加标签，我们已记录该问题并会尽快处理。请稍后再试或直接联系客服。",
+        "api_error": "抱歉，用户标签添加未能成功提交。请稍后重试或联系技术支持。",
+        "http_error": "抱歉，网络异常导致用户标签添加未能提交。请稍后重试或联系技术支持。",
+        "unexpected_error": "抱歉，出现异常，暂时无法为用户添加标签。请稍后重试或联系技术支持。",
     }
 
-    async def add_visitor_tags(
+    async def add_user_tags(
         *,
         tags: list[dict[str, str]],
         metadata: Optional[dict[str, Any]] = None,
     ) -> str:
-        """Add tags to visitor via visitor_tag.add event.
+        """Add tags to user via user_tag.add event.
 
         Args:
             tags: List of tag objects, each with 'name' (English, required) and 'name_zh' (Chinese, optional)
@@ -59,7 +59,7 @@ def create_visitor_tag_tool(
             normalized_tags.append(normalized_tag)
 
         result = await client.post_event(
-            "visitor_tag.add",
+            "user_tag.add",
             {"tags": normalized_tags, "metadata": metadata or {"source": "ai_analysis"}},
             error_messages=error_messages,
         )
@@ -68,13 +68,13 @@ def create_visitor_tag_tool(
             return result.message
 
         tag_names = ", ".join(t["name"] for t in normalized_tags)
-        return f"已为访客添加标签：{tag_names}。"
+        return f"已为用户添加标签：{tag_names}。"
 
     return Function(
-        name="add_visitor_tags",
+        name="add_user_tags",
         description=(
-            "当你识别出访客具有某些特征或属于某个分类时，调用此工具为访客添加标签。"
-            "标签用于访客分类和后续营销/服务策略。"
+            "当你识别出用户具有某些特征或属于某个分类时，调用此工具为用户添加标签。"
+            "标签用于用户分类和后续营销/服务策略。"
             "常见标签示例：VIP（重要客户）、High Intent（高意向）、Price Sensitive（价格敏感）、"
             "Tech Support（技术支持）、New User（新用户）、Returning（回访客户）等。"
         ),
@@ -97,7 +97,6 @@ def create_visitor_tag_tool(
             },
             "required": ["tags"],
         },
-        entrypoint=add_visitor_tags,
+        entrypoint=add_user_tags,
         skip_entrypoint_processing=True,
     )
-

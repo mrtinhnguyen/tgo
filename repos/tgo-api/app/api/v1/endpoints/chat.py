@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import json
 import mimetypes
 import os
@@ -16,7 +17,7 @@ from urllib.parse import quote
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session, joinedload
@@ -32,6 +33,8 @@ from app.models import (
     Staff,
     Visitor,
     VisitorSession,
+    ChannelMemoryClearance,
+    ClearanceUserType,
 )
 from app.schemas import ChatFileUploadResponse, StaffSendPlatformMessageRequest
 from app.schemas.chat import (
@@ -53,9 +56,9 @@ from app.services.chat_service import get_or_create_visitor
 from app.services.transfer_service import transfer_to_staff
 from app.models import AssignmentSource
 from app.services.ai_client import AIServiceClient
-from app.services.wukongim_client import wukongim_client
+from app.services.wukongim_client import wukongim_client, MessageType
 from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE, MEMBER_TYPE_STAFF
-from app.utils.encoding import build_visitor_channel_id, parse_visitor_channel_id
+from app.utils.encoding import build_visitor_channel_id, parse_visitor_channel_id, get_session_id
 
 
 router = APIRouter()
@@ -297,7 +300,7 @@ async def chat_completion(req: ChatCompletionRequest, db: Session = Depends(get_
         channel_id_enc = build_visitor_channel_id(visitor.id)
 
     channel_type = req.channel_type if req.channel_type is not None else CHANNEL_TYPE_CUSTOMER_SERVICE
-    session_id = f"{channel_id_enc}@{channel_type}"
+    session_id = get_session_id(f"{visitor.id}-vtr", channel_id_enc, channel_type)
 
     # 3.1) Resolve relative image/file URLs if present
     if req.msg_type in {2, 3} and req.message.startswith("/"):
@@ -447,7 +450,7 @@ async def chat_completion(req: ChatCompletionRequest, db: Session = Depends(get_
         # Start background task with the event
         asyncio.create_task(chat_service.run_background_ai_interaction(
             project_id=str(project.id),
-            visitor_id=str(visitor.id),
+            user_id=str(visitor.id),
             message=req.message,
             channel_id=channel_id_enc,
             channel_type=channel_type,
@@ -522,7 +525,7 @@ async def chat_completion(req: ChatCompletionRequest, db: Session = Depends(get_
     async def ai_event_generator() -> Any:
         async for event_payload in chat_service.process_ai_stream_to_wukongim(
             project_id=str(project.id),
-            visitor_id=str(visitor.id),
+            user_id=str(visitor.id),
             message=req.message,
             channel_id=channel_id_enc,
             channel_type=channel_type,
@@ -931,7 +934,7 @@ async def chat_completion_openai_compatible(
     client_msg_no = f"openai_{uuid4().hex}"
     channel_id_enc = build_visitor_channel_id(visitor.id)
     channel_type = CHANNEL_TYPE_CUSTOMER_SERVICE
-    session_id = f"{channel_id_enc}@{channel_type}"
+    session_id = get_session_id(f"{visitor.id}-vtr", channel_id_enc, channel_type)
 
     # 4.2) Forward a copy of user message to WuKongIM (best-effort)
     await chat_service.send_user_message_to_wukongim(
@@ -1042,7 +1045,7 @@ async def chat_completion_openai_compatible(
             try:
                 async for event_payload in chat_service.process_ai_stream_to_wukongim(
                     project_id=str(project.id),
-                    visitor_id=str(visitor.id),
+                    user_id=str(visitor.id),
                     message=user_message,
                     channel_id=channel_id_enc,
                     channel_type=channel_type,
@@ -1195,7 +1198,8 @@ async def staff_team_chat(
 
     # 3) Prepare correlation and session IDs
     client_msg_no = f"staff_team_{uuid4().hex}"
-    session_id = f"{channel_id}@{channel_type}"
+    staff_uid = f"{current_user.id}-staff"
+    session_id = get_session_id(staff_uid, channel_id, channel_type)
 
     # 4) Build from_uid for staff
     staff_uid = f"{current_user.id}-staff"
@@ -1215,7 +1219,7 @@ async def staff_team_chat(
     
     asyncio.create_task(chat_service.run_background_ai_interaction(
         project_id=str(current_user.project_id),
-        visitor_id=staff_uid,
+        user_id=staff_uid,
         message=req.message,
         channel_id=staff_uid,
         channel_type=channel_type,
@@ -1235,6 +1239,94 @@ async def staff_team_chat(
         message="Request accepted, processing in background",
         client_msg_no=client_msg_no,
     )
+
+
+@router.delete(
+    "/memory",
+    summary="清除会话记忆",
+    tags=["Chat"],
+    description="""
+    清除智能体/团队会话的 AI 记忆，并发送系统消息通知。
+    
+    该接口会将 `channel_id` + `channel_type` 转换为 AI 服务所需的 `session_id` 并调用清除。
+    清除成功后，会向该频道发送一条 'memory_cleared' 类型的系统消息。
+    """,
+)
+async def clear_chat_memory(
+    channel_id: str = Query(..., description="频道 ID"),
+    channel_type: int = Query(..., description="频道类型"),
+    current_user: Staff = Depends(require_permission("chat:send")),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """清除智能体/团队会话的 AI 记忆。"""
+    # 1) Build session_id for AI service
+    staff_uid = f"{current_user.id}-staff"
+    session_id = get_session_id(staff_uid, channel_id, channel_type)
+    
+    # 2) Get current max message seq for the channel to record clearance position
+    max_seq = await wukongim_client.get_channel_max_message_seq(
+        channel_id=channel_id,
+        channel_type=channel_type,
+        login_uid=staff_uid,
+    )
+    print("max_seq---->",max_seq)
+    # 3) Update or create clearance record
+    if max_seq is not None:
+        existing = db.query(ChannelMemoryClearance).filter(
+            ChannelMemoryClearance.user_id == current_user.id,
+            ChannelMemoryClearance.user_type == ClearanceUserType.STAFF.value,
+            ChannelMemoryClearance.channel_id == channel_id,
+            ChannelMemoryClearance.channel_type == channel_type,
+        ).first()
+
+        print("existing---->",existing)
+        if existing:
+            existing.cleared_message_seq = max_seq
+            existing.updated_at = datetime.utcnow()
+        else:
+            db.add(ChannelMemoryClearance(
+                project_id=current_user.project_id,
+                user_id=current_user.id,
+                user_type=ClearanceUserType.STAFF.value,
+                channel_id=channel_id,
+                channel_type=channel_type,
+                cleared_message_seq=max_seq,
+            ))
+        db.commit()
+
+    # 4) Call AI service to clear memory
+    ai_client = AIServiceClient()
+    await ai_client.clear_session_memory(
+        project_id=str(current_user.project_id),
+        session_id=session_id,
+        user_id=staff_uid,
+    )
+    
+    # 5) Send system message to WuKongIM
+    from_uid = staff_uid
+    if channel_type == 1:
+        from_uid = channel_id
+        # Note: channel_id here is already the correct target channel for sending message
+        # But we need to make sure we don't overwrite it for the next call if any
+        msg_channel_id = staff_uid
+    else:
+        msg_channel_id = channel_id
+    
+    try:
+        await wukongim_client.send_system_message(
+            channel_id=msg_channel_id,
+            channel_type=channel_type,
+            from_uid=from_uid,
+            content="Memory cleared, AI will restart the conversation",
+            msg_type=MessageType.MEMORY_CLEARED,
+        )
+    except Exception as e:
+        # Log error but don't fail the request if notification fails
+        from app.core.logging import get_logger
+        logger = get_logger("chat.api")
+        logger.warning(f"Failed to send memory cleared system message: {e}")
+    
+    return {"success": True, "message": "Memory cleared successfully"}
 
 
 # ============================================================================

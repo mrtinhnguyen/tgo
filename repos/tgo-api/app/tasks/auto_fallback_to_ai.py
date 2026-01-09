@@ -13,7 +13,7 @@ from app.core.database import SessionLocal
 from app.models import Platform, Visitor, VisitorServiceStatus, VisitorSession, SessionStatus
 from app.services.chat_service import handle_ai_response_non_stream
 from app.services.wukongim_client import wukongim_client
-from app.utils.encoding import build_visitor_channel_id
+from app.utils.encoding import build_visitor_channel_id, get_session_id
 from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ async def check_and_fallback_to_ai():
                             channel_type=channel_type,
                             client_msg_no=response_client_msg_no,
                             from_uid=from_uid,
-                            session_id=f"{channel_id}@{channel_type}",
+                            session_id=get_session_id(from_uid, channel_id, channel_type),
                             team_id=team_id,
                             agent_ids=platform_agent_ids
                         )

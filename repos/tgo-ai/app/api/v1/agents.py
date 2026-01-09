@@ -6,12 +6,16 @@ from typing import Optional, Union
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+
 from app.config import settings
+from app.core.logging import get_logger
 from app.dependencies import (
     get_agent_service,
     get_pagination_params,
     get_supervisor_runtime_service,
 )
+
+logger = get_logger(__name__)
 from app.schemas.agent import (
     AgentCreate,
     AgentListResponse,
@@ -308,6 +312,30 @@ async def check_agents_exist(
         offset=0,
     )
     return {"exists": total_count > 0, "count": total_count}
+
+
+@router.delete(
+    "/sessions/{session_id}/memory",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Clear session memory",
+)
+async def clear_session_memory(
+    session_id: str,
+    project_id: uuid.UUID = Query(...),
+    user_id: Optional[str] = Query(default=None, description="Optional user ID to clear personal memories"),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> None:
+    """Clear all memory and session history for a specific session.
+    
+    This deletes records from agno memory and session tables in the 'ai' schema.
+    If user_id is provided, it also clears personal memories for that user from agno_memories.
+    """
+    await agent_service.clear_session_memory(
+        session_id=session_id,
+        project_id=project_id,
+        user_id=user_id
+    )
+    logger.info(f"Cleared session memory for {session_id} (project: {project_id}, user: {user_id})")
 
 
 @router.get(

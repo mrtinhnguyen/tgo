@@ -2,20 +2,19 @@
 
 Available tools:
 - handoff: Request human support
-- visitor_info: Update visitor contact/profile information
-- visitor_sentiment: Track visitor satisfaction, emotion, and intent
-- visitor_tag: Add tags to visitors for classification
+- user_info: Update user contact/profile information
+- user_sentiment: Track user satisfaction, emotion, and intent
+- user_tag: Add tags to users for classification
 """
 
 from .handoff import create_handoff_tool
-from .visitor_info import create_visitor_info_tool
-from .visitor_sentiment import create_visitor_sentiment_tool
-from .visitor_tag import create_visitor_tag_tool
+from .user_info import create_user_info_tool
+from .user_sentiment import create_user_sentiment_tool
+from .user_tag import create_user_tag_tool
 
 __all__ = [
     "create_handoff_tool",
-    "create_visitor_info_tool",
-    "create_visitor_sentiment_tool",
-    "create_visitor_tag_tool",
+    "create_user_info_tool",
+    "create_user_sentiment_tool",
+    "create_user_tag_tool",
 ]
-

@@ -7,6 +7,7 @@ This maintains a deterministic, reversible mapping for the same input string.
 """
 from __future__ import annotations
 
+import zlib
 from typing import Final, Union
 from uuid import UUID
 
@@ -133,3 +134,33 @@ def parse_visitor_channel_id(channel_id: str) -> UUID:
         return UUID(uuid_part)
     except Exception as exc:
         raise ValueError("Invalid visitor channel_id value") from exc
+
+
+def get_session_id(from_uid: str, to_uid: str, channel_type: int) -> str:
+    """
+    Generate a deterministic session ID for a conversation.
+    
+    If channel_type is 1 (personal), follows the ordering logic based on CRC32 
+    hashes of both UIDs to ensure consistency regardless of who is the sender.
+    
+    This matches WuKongIM's internal session ID generation logic for personal channels.
+    """
+    if channel_type == 1:
+        # For personal channels, session_id is always {uid1}@{uid2} where uid1 and uid2 
+        # are ordered deterministically to ensure both participants see the same session.
+        from_hash = zlib.crc32(from_uid.encode())
+        to_hash = zlib.crc32(to_uid.encode())
+        
+        if from_hash > to_hash:
+            return f"{from_uid}@{to_uid}"
+        
+        if from_uid != to_uid and from_hash == to_hash:
+            # Hash collision (rare but possible with CRC32)
+            # In this case we fallback to string comparison for deterministic ordering
+            if from_uid > to_uid:
+                return f"{from_uid}@{to_uid}"
+        
+        return f"{to_uid}@{from_uid}"
+    
+    # For group or other channel types, use the channel_id and channel_type
+    return f"{to_uid}@{channel_type}"

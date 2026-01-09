@@ -3004,7 +3004,12 @@
       "transferError": "转接失败",
       "transferTo": "转接给",
       "noStaffAvailable": "暂无可用客服",
-      "loadingStaff": "加载中..."
+      "loadingStaff": "加载中...",
+      "clearMemory": "清除记忆",
+      "clearMemoryTooltip": "清除 AI 对话记忆，重新开始对话",
+      "clearMemoryConfirm": "确定要清除此会话的 AI 记忆吗？清除后 AI 将不再记得之前的对话内容。",
+      "clearMemorySuccess": "记忆已清除",
+      "clearMemoryError": "清除记忆失败"
     },
     "suggestions": {
       "label": "✨ 建议："
@@ -3046,7 +3051,8 @@
         "staffAssigned": "您已接入人工客服，客服 {0} 将为您服务。",
         "sessionTransferred": "会话已转接。客服 {0} 已将您转接给客服 {1}。",
         "sessionClosed": "会话已结束。客服 {0} 已完成服务。",
-        "sessionClosedEmpty": "会话已结束。"
+        "sessionClosedEmpty": "会话已结束。",
+        "memoryCleared": "记忆已清除，AI 将重新开始对话"
       }
     },
     "input": {

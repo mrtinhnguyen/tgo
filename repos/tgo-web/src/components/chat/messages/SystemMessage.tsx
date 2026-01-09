@@ -92,6 +92,8 @@ const SystemMessage: React.FC<SystemMessageProps> = ({ payload }) => {
           t('chat.messages.system.sessionClosed', 'Session ended. Agent {0} has completed the service.'),
           extra
         );
+      case MessagePayloadType.MEMORY_CLEARED:
+        return [t('chat.messages.system.memoryCleared', 'Memory cleared, AI will restart the conversation')];
       default:
         // Fallback to original content for unknown types
         return parseSystemMessageContent(payload.content, payload.extra);

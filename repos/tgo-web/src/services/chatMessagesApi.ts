@@ -34,6 +34,7 @@ class ChatMessagesApiService extends BaseApiService {
   protected readonly endpoints = {
     sendPlatformMessage: '/v1/chat/messages/send',
     teamChat: '/v1/chat/team',
+    clearMemory: '/v1/chat/memory',
   } as const;
 
   /**
@@ -56,6 +57,20 @@ class ChatMessagesApiService extends BaseApiService {
     data: StaffTeamChatRequest
   ): Promise<StaffTeamChatResponse> {
     return this.post<StaffTeamChatResponse>(this.endpoints.teamChat, data);
+  }
+
+  /**
+   * Clear AI conversational memory for a specific channel.
+   */
+  async clearChatMemory(params: {
+    channel_id: string;
+    channel_type: number;
+  }): Promise<{ success: boolean; message: string }> {
+    const query = new URLSearchParams({
+      channel_id: params.channel_id,
+      channel_type: params.channel_type.toString(),
+    }).toString();
+    return this.delete<{ success: boolean; message: string }>(`${this.endpoints.clearMemory}?${query}`);
   }
 }
 

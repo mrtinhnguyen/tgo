@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Chat, PlatformType, ChannelVisitorExtra, VisitorServiceStatus } from '@/types';
 import { useTranslation } from 'react-i18next';
-import { Bot, LogOut, Loader2, ArrowRightLeft, ChevronDown, User } from 'lucide-react';
+import { Bot, LogOut, Loader2, ArrowRightLeft, ChevronDown, User, RotateCcw } from 'lucide-react';
 import { TbBrain } from 'react-icons/tb';
 
 import { getPlatformIconComponent, getPlatformLabel, toPlatformType, getPlatformColor } from '@/utils/platformUtils';
@@ -13,6 +13,7 @@ import { useChannelStore } from '@/stores/channelStore';
 import { useChannelDisplay } from '@/hooks/useChannelDisplay';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/stores/chatStore';
+import { chatMessagesApiService } from '@/services/chatMessagesApi';
 
 /**
  * Props for the ChatHeader component
@@ -32,6 +33,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({ activeChat, onEndCha
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const [isClosing, setIsClosing] = useState(false);
+  const [isClearingMemory, setIsClearingMemory] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
   const [showTransferMenu, setShowTransferMenu] = useState(false);
   const [staffList, setStaffList] = useState<StaffResponse[]>([]);
@@ -39,6 +41,9 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({ activeChat, onEndCha
   const transferMenuRef = useRef<HTMLDivElement>(null);
   const updateChannelExtra = useChannelStore(state => state.updateChannelExtra);
   const deleteChat = useChatStore(state => state.deleteChat);
+  const clearHistoricalMessages = useChatStore(state => state.clearHistoricalMessages);
+  const setMessages = useChatStore(state => state.setMessages);
+  const updateConversationPreview = useChatStore(state => state.updateConversationPreview);
   const currentUser = useAuthStore(state => state.user);
   
   // 判断是否是 agent 会话（channelId 以 -agent 结尾）或 team 会话（channelId 以 -team 结尾）
@@ -99,6 +104,36 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({ activeChat, onEndCha
       setIsClosing(false);
     }
   }, [visitorId, isClosing, showSuccess, showError, t, activeChat.channelId, activeChat.channelType, activeChat.id, updateChannelExtra, deleteChat, onEndChatSuccess]);
+
+  // 清除记忆处理
+  const handleClearMemory = useCallback(async () => {
+    if (!activeChat.channelId || activeChat.channelType === undefined || isClearingMemory) return;
+    
+    const confirmClear = window.confirm(t('chat.header.clearMemoryConfirm', '确定要清除此会话的 AI 记忆吗？清除后 AI 将不再记得之前的对话内容。'));
+    if (!confirmClear) return;
+
+    setIsClearingMemory(true);
+    try {
+      // 1. 先调用接口远程清除
+      await chatMessagesApiService.clearChatMemory({
+        channel_id: activeChat.channelId,
+        channel_type: activeChat.channelType,
+      });
+
+      // 2. 如果远程调用成功，再清空本地缓存的聊天记录
+      clearHistoricalMessages(activeChat.channelId, activeChat.channelType);
+      setMessages([]);
+      updateConversationPreview(activeChat.channelId, activeChat.channelType, '');
+      
+      showSuccess(t('chat.header.clearMemorySuccess', '记忆已清除'));
+    } catch (error: any) {
+      // 3. 如果远程调用失败需要提醒用户
+      console.error('Failed to clear memory:', error);
+      showError(error?.message || t('chat.header.clearMemoryError', '清除记忆失败'));
+    } finally {
+      setIsClearingMemory(false);
+    }
+  }, [activeChat.channelId, activeChat.channelType, isClearingMemory, clearHistoricalMessages, setMessages, updateConversationPreview, showSuccess, showError, t]);
 
   // 加载坐席列表
   const loadStaffList = useCallback(async () => {
@@ -265,6 +300,24 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({ activeChat, onEndCha
               <LogOut className="w-3.5 h-3.5" />
             )}
             <span>{t('chat.header.endChat', '结束聊天')}</span>
+          </button>
+        </div>
+      )}
+      {/* 操作按钮 - AI 会话显示清除记忆 */}
+      {isAIChat && (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleClearMemory}
+            disabled={isClearingMemory}
+            className="flex items-center gap-1 px-2 py-1 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            title={t('chat.header.clearMemoryTooltip', '清除 AI 对话记忆，重新开始对话')}
+          >
+            {isClearingMemory ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RotateCcw className="w-3.5 h-3.5" />
+            )}
+            <span>{t('chat.header.clearMemory', '清除记忆')}</span>
           </button>
         </div>
       )}

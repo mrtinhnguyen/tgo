@@ -3,7 +3,7 @@
 import uuid
 from typing import List, Optional, Tuple, Dict
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -409,6 +409,39 @@ class AgentService:
 
         binding.enabled = enabled
         await self.db.commit()
+
+    async def clear_session_memory(
+        self, session_id: str, project_id: uuid.UUID, user_id: Optional[str] = None
+    ) -> None:
+        """Clear all memory and session history for a specific session.
+        
+        This deletes records from agno memory and session tables in the 'ai' schema.
+        If user_id is provided, it also clears personal memories for that user from agno_memories.
+        """
+        try:
+            # Delete from agno_memories (user/agent memories)
+            # The user noted that agno_memories uses user_id, not session_id
+            if user_id:
+                await self.db.execute(
+                    text("DELETE FROM ai.agno_memories WHERE user_id = :user_id"),
+                    {"user_id": user_id}
+                )
+            
+            # Delete from agno_sessions (session history)
+            # We use try/except as the table might not exist yet
+            try:
+                await self.db.execute(
+                    text("DELETE FROM ai.agno_sessions WHERE session_id = :session_id"),
+                    {"session_id": session_id}
+                )
+            except Exception:
+                # Table might not exist yet, which is fine
+                pass
+            
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
 
     async def _validate_team_belongs_to_project(
         self, team_id: uuid.UUID, project_id: uuid.UUID

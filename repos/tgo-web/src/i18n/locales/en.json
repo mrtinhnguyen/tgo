@@ -2086,7 +2086,12 @@
       "transferError": "Transfer failed",
       "transferTo": "Transfer to",
       "noStaffAvailable": "No staff available",
-      "loadingStaff": "Loading..."
+      "loadingStaff": "Loading...",
+      "clearMemory": "Clear Memory",
+      "clearMemoryTooltip": "Clear AI conversation memory and restart",
+      "clearMemoryConfirm": "Are you sure you want to clear the AI memory for this session? The AI will no longer remember previous conversations.",
+      "clearMemorySuccess": "Memory cleared",
+      "clearMemoryError": "Failed to clear memory"
     },
     "suggestions": {
       "label": "✨ Suggestions:"
@@ -2128,7 +2133,8 @@
         "staffAssigned": "You have been connected to customer service. Agent {0} will assist you.",
         "sessionTransferred": "Session transferred. Agent {0} has transferred you to Agent {1}.",
         "sessionClosed": "Session ended. Agent {0} has completed the service.",
-        "sessionClosedEmpty": "Session ended."
+        "sessionClosedEmpty": "Session ended.",
+        "memoryCleared": "Memory cleared, AI will restart the conversation"
       }
     },
     "input": {

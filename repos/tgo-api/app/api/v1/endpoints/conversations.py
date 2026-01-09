@@ -11,7 +11,19 @@ from sqlalchemy.orm import Session, joinedload, selectinload, aliased
 from app.core.database import get_db
 from app.core.logging import get_logger
 from app.core.security import get_current_active_user, get_user_language, UserLanguage, require_permission
-from app.models import Staff, StaffRole, Visitor, VisitorTag, VisitorWaitingQueue, WaitingStatus, VisitorSession, SessionStatus, VisitorServiceStatus
+from app.models import (
+    Staff,
+    StaffRole,
+    Visitor,
+    VisitorTag,
+    VisitorWaitingQueue,
+    WaitingStatus,
+    VisitorSession,
+    SessionStatus,
+    VisitorServiceStatus,
+    ChannelMemoryClearance,
+    ClearanceUserType,
+)
 from app.utils.manual_service_tag import MANUAL_SERVICE_TAG_ID
 from app.schemas.base import PaginationMetadata
 from app.schemas.wukongim import (
@@ -895,9 +907,23 @@ async def delete_conversation(
 async def sync_channel_messages(
     request: WuKongIMChannelMessageSyncRequest,
     current_user: Staff = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> WuKongIMChannelMessageSyncResponse:
     """同步指定频道的历史消息记录。"""
     staff_uid = f"{current_user.id}-staff"
+
+    # 1) Check if there is a memory clearance record for this staff and channel
+    clearance = db.query(ChannelMemoryClearance).filter(
+        ChannelMemoryClearance.user_id == current_user.id,
+        ChannelMemoryClearance.user_type == ClearanceUserType.STAFF.value,
+        ChannelMemoryClearance.channel_id == request.channel_id,
+        ChannelMemoryClearance.channel_type == request.channel_type,
+    ).first()
+
+    # 2) If clearance record exists, adjust start_message_seq to filter out old messages
+    effective_start_seq = request.start_message_seq
+    if clearance and clearance.cleared_message_seq > effective_start_seq:
+        effective_start_seq = clearance.cleared_message_seq + 1
 
     logger.info(
         f"Staff {current_user.username} syncing channel messages",
@@ -907,9 +933,11 @@ async def sync_channel_messages(
             "channel_id": request.channel_id,
             "channel_type": request.channel_type,
             "start_message_seq": request.start_message_seq,
+            "effective_start_seq": effective_start_seq,
             "end_message_seq": request.end_message_seq,
             "limit": request.limit,
             "pull_mode": request.pull_mode,
+            "has_clearance": clearance is not None,
         }
     )
 
@@ -918,7 +946,7 @@ async def sync_channel_messages(
             login_uid=staff_uid,
             channel_id=request.channel_id,
             channel_type=request.channel_type,
-            start_message_seq=request.start_message_seq,
+            start_message_seq=effective_start_seq,
             end_message_seq=request.end_message_seq,
             limit=request.limit,
             pull_mode=request.pull_mode,

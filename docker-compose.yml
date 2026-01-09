@@ -36,7 +36,7 @@ services:
 
   # WuKongIM service
   wukongim:
-    image: ghcr.io/wukongim/wukongim:v2
+    image: registry.cn-shanghai.aliyuncs.com/wukongim/wukongim:v2.2.3-dev
     container_name: tgo-wukongim
     env_file:
       - ./.env

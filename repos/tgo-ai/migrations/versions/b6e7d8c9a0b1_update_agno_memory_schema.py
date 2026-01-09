@@ -22,7 +22,7 @@ def upgrade() -> None:
     # Add created_at and feedback columns to agno_memories table
     # The logs indicate the table is in the 'ai' schema
     # We use raw SQL to handle the 'IF NOT EXISTS' logic which is more robust for external tables
-    op.execute('ALTER TABLE IF EXISTS ai.agno_memories ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP')
+    op.execute('ALTER TABLE IF EXISTS ai.agno_memories ADD COLUMN IF NOT EXISTS created_at INTEGER')
     op.execute('ALTER TABLE IF EXISTS ai.agno_memories ADD COLUMN IF NOT EXISTS feedback JSONB')
 
 

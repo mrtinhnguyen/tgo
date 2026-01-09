@@ -713,9 +713,9 @@ class AIServiceEvent(BaseSchema):
     """Envelope for generic AI service events."""
 
     event_type: str = Field(..., description="Event type identifier (e.g., manual_service.request)")
-    visitor_id: Optional[UUID] = Field(
+    user_id: Optional[str] = Field(
         None,
-        description="Visitor identifier related to the event (if applicable)",
+        description="User identifier (visitor or staff) related to the event",
     )
     payload: Dict[str, Any] = Field(
         default_factory=dict,
