@@ -58,8 +58,8 @@ from app.services.chat_service import get_or_create_visitor
 from app.services.transfer_service import transfer_to_staff
 from app.models import AssignmentSource
 from app.services.ai_client import AIServiceClient
-from app.services.wukongim_client import wukongim_client, MessageType
-from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE, MEMBER_TYPE_STAFF
+from app.services.wukongim_client import wukongim_client
+from app.utils.const import CHANNEL_TYPE_CUSTOMER_SERVICE, MEMBER_TYPE_STAFF, MessageType
 from app.utils.encoding import build_visitor_channel_id, parse_visitor_channel_id, get_session_id
 
 
@@ -305,7 +305,7 @@ async def chat_completion(req: ChatCompletionRequest, db: Session = Depends(get_
     session_id = get_session_id(f"{visitor.id}-vtr", channel_id_enc, channel_type)
 
     # 3.1) Resolve image/file URLs using storage backend
-    if req.msg_type in {2, 3}:
+    if req.msg_type in {MessageType.IMAGE, MessageType.FILE}:
         from app.services.storage import get_storage
         storage = get_storage()
         req.message = storage.resolve_url(req.message)

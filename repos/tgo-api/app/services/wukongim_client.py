@@ -12,6 +12,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.core.config import settings
+from app.utils.const import MessageType
 from app.schemas.wukongim import (
     WuKongIMRouteResponse,
     WuKongIMMessageSendResponse,
@@ -25,27 +26,6 @@ from app.schemas.wukongim import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class MessageType:
-    """WuKongIM message type constants.
-    
-    Standard message types (1-999):
-        - TEXT (1): Plain text message
-    
-    System message types (1000-2000):
-        - STAFF_ASSIGNED (1000): Staff assigned to visitor notification
-        - SESSION_CLOSED (1001): Session closed notification
-        - SESSION_TRANSFERRED (1002): Session transferred notification
-    """
-    # Standard message types
-    TEXT = 1
-    
-    # System message types (1000-2000 reserved for system notifications)
-    STAFF_ASSIGNED = 1000
-    SESSION_CLOSED = 1001
-    SESSION_TRANSFERRED = 1002
-    MEMORY_CLEARED = 1003
 
 
 class EventType:
@@ -556,7 +536,7 @@ class WuKongIMClient:
         channel_id: str,
         channel_type: int,
         content: str,
-        msg_type: int,
+        msg_type: MessageType,
         from_uid: Optional[str] = None,
         extra: Optional[Any] = None,
         client_msg_no: Optional[str] = None,

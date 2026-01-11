@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from app.schemas.base import BaseSchema
+from app.utils.const import MessageType
 
 
 class StaffSendPlatformMessageRequest(BaseSchema):
@@ -70,10 +71,10 @@ class ChatCompletionRequest(BaseSchema):
         None,
         description="访客头像URL"
     )
-    msg_type: Optional[int] = Field(
-        1,
+    msg_type: Optional[MessageType] = Field(
+        MessageType.TEXT,
         description="消息类型：1-文本，2-图片，3-文件，4-语音，5-视频",
-        examples=[1, 2]
+        examples=[MessageType.TEXT, MessageType.IMAGE]
     )
     forward_user_message_to_wukongim: bool = Field(
         default=True,

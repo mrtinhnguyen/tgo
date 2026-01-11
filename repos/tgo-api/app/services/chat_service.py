@@ -28,7 +28,11 @@ from app.tasks.process_waiting_queue import trigger_process_entry
 from app.services.wukongim_client import wukongim_client
 from app.services.ai_client import AIServiceClient
 from app.utils.encoding import build_project_staff_channel_id
-from app.utils.const import CHANNEL_TYPE_PROJECT_STAFF, CHANNEL_TYPE_CUSTOMER_SERVICE
+from app.utils.const import (
+    CHANNEL_TYPE_PROJECT_STAFF,
+    CHANNEL_TYPE_CUSTOMER_SERVICE,
+    MessageType,
+)
 from app.schemas.chat import (
     OpenAIChatMessage,
     OpenAIChatCompletionResponse,
@@ -457,7 +461,7 @@ async def send_user_message_to_wukongim(
     channel_id: str,
     channel_type: int,
     content: str,
-    msg_type: Optional[int] = 1,
+    msg_type: Optional[MessageType] = MessageType.TEXT,
     extra: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Send a copy of the user's message to WuKongIM (best-effort)."""
@@ -467,12 +471,12 @@ async def send_user_message_to_wukongim(
         # Build payload based on msg_type
         # 1=TEXT, 2=IMAGE, 3=FILE
         payload: Dict[str, Any] = {
-            "type": msg_type or 1,
+            "type": int(msg_type or MessageType.TEXT),
             "content": content,
         }
-        if msg_type == 2:  # IMAGE
+        if msg_type == MessageType.IMAGE:
             payload["url"] = content
-        elif msg_type == 3:  # FILE
+        elif msg_type == MessageType.FILE:
             payload["url"] = content
             # For files, name is often required by frontend
             if extra and extra.get("file_name"):
