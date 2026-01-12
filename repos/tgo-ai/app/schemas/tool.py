@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import Field, ConfigDict
 
 from app.schemas.base import BaseSchema, IDMixin, TimestampMixin
-from app.models.tool import ToolType
+from app.models.tool import ToolType, ToolSourceType
 
 
 class ToolBase(BaseSchema):
@@ -22,6 +22,8 @@ class ToolBase(BaseSchema):
     tool_type: ToolType = Field(description="Tool type (MCP | FUNCTION)")
     transport_type: Optional[str] = Field(default=None, description="Transport type (e.g., http, stdio, sse)")
     endpoint: Optional[str] = Field(default=None, description="Endpoint URL or path")
+    tool_source_type: ToolSourceType = Field(default=ToolSourceType.LOCAL, description="Tool source (LOCAL or TOOLSTORE)")
+    toolstore_tool_id: Optional[str] = Field(default=None, description="Associated ToolStore tool ID")
     config: Optional[dict] = Field(default=None, description="Tool configuration JSON object")
 
 

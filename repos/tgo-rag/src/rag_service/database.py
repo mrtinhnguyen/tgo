@@ -153,31 +153,16 @@ async def get_db_session_dependency() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_database():
     """
-    Initialize the database by creating all tables.
+    Initialize the database engine.
     
-    This function should be called during application startup to ensure
-    all database tables are created.
+    Schema creation is handled by Alembic migrations.
     """
     global engine
     
     if engine is None:
         engine = create_database_engine()
     
-    try:
-        async with engine.begin() as conn:
-            # If Alembic is managing the schema (version table exists), skip create_all
-            result = await conn.execute(text("SELECT to_regclass('public.rag_alembic_version')"))
-            version_table = result.scalar()
-            if version_table:
-                logger.info("Alembic version table detected; skipping Base.metadata.create_all")
-            else:
-                # Bootstrap schema in environments without Alembic
-                await conn.run_sync(Base.metadata.create_all)
-
-        logger.info("Database initialization complete")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
+    logger.info("Database initialized (schema management by Alembic)")
 
 
 async def close_database():

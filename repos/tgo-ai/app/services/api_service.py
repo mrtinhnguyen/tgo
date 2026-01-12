@@ -14,8 +14,24 @@ class APIServiceClient:
     def __init__(self):
         """Initialize the API service client."""
         self.api_base_url = settings.api_service_url
+        self.internal_api_url = f"{settings.api_service_url.replace(':8000', ':8001')}/internal"
         self.plugin_runtime_url = settings.plugin_runtime_url
         self.timeout = 30.0
+
+    async def get_toolstore_credential(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch toolstore credential for a project from the internal API.
+        """
+        url = f"{self.internal_api_url}/toolstore/{project_id}/credential"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(url)
+                if response.status_code == 200:
+                    return response.json()
+                return None
+            except Exception as e:
+                logger.error(f"Error fetching toolstore credential: {e}")
+                return None
 
     async def execute_plugin_tool(
         self,

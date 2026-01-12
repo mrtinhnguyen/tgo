@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
+    "axios": "^1.13.2",
     "dompurify": "^3.1.6",
     "easyjssdk": "^1.0.14",
     "highlight.js": "^11.11.1",

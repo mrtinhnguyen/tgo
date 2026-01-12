@@ -32,6 +32,7 @@ from app.runtime.tools.models import (
     WorkflowConfig,
 )
 from app.runtime.tools.token import get_mcp_access_token
+from app.models.tool import Tool as ToolModel
 from app.runtime.tools.utils import (
     create_agno_mcp_tool,
     create_rag_tool,
@@ -40,6 +41,7 @@ from app.runtime.tools.utils import (
     create_http_tool,
     wrap_mcp_authenticate_tool,
 )
+from app.services.api_service import api_service_client
 
 UNEDITABLE_SYSTEM_PROMPT = (
     "\nIf the tool throws an error requiring authentication, provide the user with a Markdown "
@@ -227,7 +229,12 @@ class AgentBuilder:
         if internal_agent and internal_agent.tools:
             try:
                 tools.extend(
-                    await self._build_mcp_tools_from_agent(internal_agent, session_id, user_id)
+                    await self._build_mcp_tools_from_agent(
+                        internal_agent, 
+                        session_id, 
+                        user_id,
+                        project_id=request.project_id
+                    )
                 )
             except (MCPConnectionError, MCPToolError, MCPAuthenticationError) as exc:
                 self._logger.warning(
@@ -446,6 +453,7 @@ class AgentBuilder:
         internal_agent: "InternalAgent",
         session_id: Optional[str],
         user_id: Optional[str],
+        project_id: Optional[str] = None,
     ) -> List[Any]:
         """Build MCP tools from InternalAgent.tools configuration.
 
@@ -515,6 +523,17 @@ class AgentBuilder:
             headers["X-Session-ID"] = session_id
         if user_id:
             headers["X-User-ID"] = user_id
+        
+        # Add ToolStore API Key if applicable (Project-level key)
+        if project_id:
+            credential = await api_service_client.get_toolstore_credential(project_id)
+            if credential and credential.get("api_key"):
+                headers["X-API-Key"] = credential["api_key"]
+                self._logger.debug(f"Injected ToolStore API Key for project {project_id}")
+        
+        # Fallback to global ToolStore API Key if still not set
+        if "X-API-Key" not in headers and settings.toolstore_api_key:
+            headers["X-API-Key"] = settings.toolstore_api_key
 
         # Separate stdio commands from HTTP/SSE endpoints
         stdio_commands: List[str] = []
@@ -625,45 +644,87 @@ class AgentBuilder:
                     # HTTP transport: create individual MCPTools instance
                     server_url = endpoint.rstrip("/")
 
-                    # Note: agno's MCPTools does not accept headers parameter
-                    # Authentication should be handled via URL parameters or other means
-                    mcp_tools_instance = MCPTools(
-                        transport="streamable-http",
-                        url=server_url,
-                    )
+                    # If we have custom headers (e.g. for ToolStore), we need to use 
+                    # a custom tool wrapper because agno's MCPTools doesn't support headers
+                    if headers:
+                        for tool_model in endpoint_tools:
+                            # Note: We need a Tool model object for create_agno_mcp_tool
+                            # Assuming tool_model.base_config contains the original Tool info
+                            base_config = tool_model.base_config or {}
+                            
+                            mcp_tool_obj = ToolModel(
+                                id=tool_model.tool_id,
+                                name=tool_model.tool_name,
+                                description=tool_model.description or "",
+                                inputSchema=base_config.get("inputSchema", {"type": "object", "properties": {}}),
+                            )
+                            
+                            tool_func = create_agno_mcp_tool(
+                                mcp_tool=mcp_tool_obj,
+                                mcp_server_url=server_url,
+                                headers=headers
+                            )
+                            mcp_tools_instances.append(tool_func)
+                            
+                        self._logger.debug(
+                            "Created individual MCP tool functions with custom headers",
+                            endpoint=endpoint,
+                            tool_count=len(endpoint_tools),
+                        )
+                    else:
+                        mcp_tools_instance = MCPTools(
+                            transport="streamable-http",
+                            url=server_url,
+                        )
+                        await mcp_tools_instance.connect()
+                        mcp_tools_instances.append(mcp_tools_instance)
 
-                    await mcp_tools_instance.connect()
-                    mcp_tools_instances.append(mcp_tools_instance)
-
-                    self._logger.debug(
-                        "Created and connected HTTP MCPTools instance",
-                        endpoint=endpoint,
-                        server_url=server_url,
-                        tool_count=len(endpoint_tools),
-                        tool_names=[tool.tool_name for tool in endpoint_tools],
-                    )
+                        self._logger.debug(
+                            "Created and connected HTTP MCPTools instance",
+                            endpoint=endpoint,
+                            server_url=server_url,
+                            tool_count=len(endpoint_tools),
+                            tool_names=[tool.tool_name for tool in endpoint_tools],
+                        )
 
                 elif transport_type == "sse":
                     # SSE transport: create individual MCPTools instance
                     server_url = endpoint.rstrip("/")
 
-                    # Note: agno's MCPTools does not accept headers parameter
-                    # Authentication should be handled via URL parameters or other means
-                    mcp_tools_instance = MCPTools(
-                        transport="sse",
-                        url=server_url,
-                    )
+                    # If we have custom headers, we need individual tool functions
+                    if headers:
+                        for tool_model in endpoint_tools:
+                            base_config = tool_model.base_config or {}
+                            mcp_tool_obj = ToolModel(
+                                id=tool_model.tool_id,
+                                name=tool_model.tool_name,
+                                description=tool_model.description or "",
+                                inputSchema=base_config.get("inputSchema", {"type": "object", "properties": {}}),
+                            )
+                            # SSE support in create_agno_mcp_tool would be needed, 
+                            # but currently it's hardcoded to streamablehttp_client
+                            # For simplicity, we assume http for toolstore
+                            tool_func = create_agno_mcp_tool(
+                                mcp_tool=mcp_tool_obj,
+                                mcp_server_url=server_url,
+                                headers=headers
+                            )
+                            mcp_tools_instances.append(tool_func)
+                    else:
+                        mcp_tools_instance = MCPTools(
+                            transport="sse",
+                            url=server_url,
+                        )
+                        await mcp_tools_instance.connect()
+                        mcp_tools_instances.append(mcp_tools_instance)
 
-                    await mcp_tools_instance.connect()
-                    mcp_tools_instances.append(mcp_tools_instance)
-
-                    self._logger.debug(
-                        "Created and connected SSE MCPTools instance",
-                        endpoint=endpoint,
-                        server_url=server_url,
-                        tool_count=len(endpoint_tools),
-                        tool_names=[tool.tool_name for tool in endpoint_tools],
-                    )
+                        self._logger.debug(
+                            "Created and connected SSE MCPTools instance",
+                            endpoint=endpoint,
+                            server_url=server_url,
+                            tool_count=len(endpoint_tools),
+                            tool_names=[tool.tool_name for tool in endpoint_tools],
+                        )
 
                 else:
                     self._logger.warning(

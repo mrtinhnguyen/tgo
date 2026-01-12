@@ -35,6 +35,7 @@ from app.api.v1.endpoints import (
     ai_runs,
     setup,
     system,
+    toolstore,
     utils,
 )
 
@@ -229,6 +230,13 @@ api_router.include_router(
 api_router.include_router(
     docs.router,
     tags=["Documentation"],
+)
+
+# ToolStore endpoints
+api_router.include_router(
+    toolstore.router,
+    prefix="/tool-store",
+    tags=["ToolStore"],
 )
 
 # Utility endpoints

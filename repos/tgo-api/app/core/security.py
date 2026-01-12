@@ -170,24 +170,6 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Sta
     return user
 
 
-def get_project_by_api_key(db: Session, api_key: str) -> Optional[Project]:
-    """Get project by API key."""
-    # Security check: Block dev API key in production
-    if api_key == "dev" and not settings.is_development:
-        logger.critical(
-            f"🚨 SECURITY ALERT: Development API key 'dev' used in {settings.ENVIRONMENT} environment! "
-            "This is a serious security violation."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Development API key not allowed in production environment"
-        )
-
-    return db.query(Project).filter(
-        Project.api_key == api_key,
-        Project.deleted_at.is_(None)
-    ).first()
-
 
 def get_project_by_id(db: Session, project_id: Union[str, UUID]) -> Optional[Project]:
     """Get project by ID."""
@@ -197,40 +179,6 @@ def get_project_by_id(db: Session, project_id: Union[str, UUID]) -> Optional[Pro
     ).first()
 
 
-async def get_current_project_from_api_key(
-    api_key: Optional[str] = None,
-    db: Session = Depends(get_db),
-) -> Optional[Project]:
-    """Get current project from API key header."""
-    if not api_key:
-        return None
-    
-    project = get_project_by_api_key(db, api_key)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key"
-        )
-    
-    return project
-
-
-def check_project_access(user: Staff, project_id: UUID) -> bool:
-    """Check if user has access to project."""
-    return user.project_id == project_id
-
-
-def require_project_access(
-    user: Staff = Depends(get_current_active_user),
-    project_id: Optional[UUID] = None,
-) -> Staff:
-    """Require user to have access to specific project."""
-    if project_id and not check_project_access(user, project_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to project resources"
-        )
-    return user
 
 
 def generate_api_key() -> str:

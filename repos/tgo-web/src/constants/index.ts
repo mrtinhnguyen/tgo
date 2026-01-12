@@ -92,6 +92,15 @@ export const STORAGE_KEYS = {
   CONVERSATION: 'conversation-store',
   MESSAGE: 'message-store',
   SYNC: 'sync-store',
+  TOOLSTORE_AUTH: 'toolstore-auth-storage',
+  TOOLSTORE_TOKEN: 'toolstore-auth-token',
+  TOOLSTORE_REFRESH_TOKEN: 'toolstore-refresh-token',
+} as const;
+
+/** Tool Store URLs */
+export const TOOL_STORE_URLS = {
+  WEB: (window as any).ENV?.VITE_TOOLSTORE_WEB_URL || 'http://localhost:3002',
+  API: (window as any).ENV?.VITE_TOOLSTORE_API_URL || 'http://localhost:8095',
 } as const;
 
 // ----------------------------------------------------------------------------

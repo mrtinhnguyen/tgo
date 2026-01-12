@@ -92,6 +92,7 @@ class AgentRunRequest(BaseModel):
     config: Optional[AgentConfig] = Field(default=None, description="智能体执行配置")
     session_id: Optional[str] = Field(default=None, description="会话ID")
     user_id: Optional[str] = Field(default=None, description="用户ID")
+    project_id: Optional[str] = Field(default=None, description="项目ID")
     stream: bool = Field(default=False, description="是否开启流式输出")
     stream_intermediate_steps: bool = Field(
         default=False,

@@ -1,14 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, Search, Filter, Loader2, Sparkles, Brain, Wrench, Bot, Puzzle, Package, Grid3X3 } from 'lucide-react';
+import { X, Search, Filter, Loader2, Sparkles, Brain, Wrench, Bot, Puzzle, Package, Grid3X3, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ToolStoreCard from './ToolStoreCard';
 import ToolStoreDetail from './ToolStoreDetail';
 import StoreLoginModal from './StoreLoginModal';
-import { TOOL_STORE_CATEGORIES, searchTools } from '@/data/mockToolStore';
+import { toolStoreApi } from '@/services/toolStoreApi';
 import { useProjectToolsStore } from '@/stores/projectToolsStore';
-import { useAuthStore } from '@/stores/authStore';
+import { useToolStoreAuthStore } from '@/stores/toolStoreAuthStore';
 import { useToast } from './ToolToastProvider';
-import type { ToolStoreItem } from '@/types';
+import { useParams } from 'react-router-dom';
+import type { ToolStoreItem, ToolStoreCategory } from '@/types';
 
 interface ToolStoreModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface ToolStoreModalProps {
 
 const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
+  const { projectId } = useParams();
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -25,44 +27,104 @@ const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tools, setTools] = useState<ToolStoreItem[]>([]);
+  const [categories, setCategories] = useState<ToolStoreCategory[]>([]);
+  const [_total, setTotal] = useState(0);
 
   const { aiTools, loadTools } = useProjectToolsStore();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, bindToProject, logout } = useToolStoreAuthStore();
+  const { i18n } = useTranslation();
+  const currentLang = i18n.language.startsWith('zh') ? 'zh' : 'en';
 
-  // Simulation of initial loading
+  // Load categories from Tool Store API
+  const fetchCategories = async () => {
+    try {
+      const data = await toolStoreApi.getCategories();
+      const mappedCategories: ToolStoreCategory[] = [
+        { 
+          id: 'all', 
+          slug: 'all', 
+          name_zh: '全部工具', 
+          name_en: 'All Tools', 
+          icon: 'Grid3X3', 
+          label: '全部工具' 
+        },
+        ...data.map((cat: any) => ({
+          id: cat.id,
+          slug: cat.slug,
+          name_zh: cat.name_zh,
+          name_en: cat.name_en,
+          icon: cat.icon || 'Package',
+          label: cat.name_zh
+        }))
+      ];
+      setCategories(mappedCategories);
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+    }
+  };
+
+  // Load tools from Tool Store API
+  const fetchTools = async () => {
+    setLoading(true);
+    try {
+      const data = await toolStoreApi.getTools({
+        category: selectedCategory === 'all' ? undefined : selectedCategory,
+        search: searchQuery || undefined,
+      });
+      
+      // 前端简单增强搜索，如果后端不支持多语言搜索的话
+      // 实际上后端 ilike 应该支持中文了
+      setTools(data?.items || []);
+      setTotal(data?.total || 0);
+    } catch (error) {
+      console.error('Failed to fetch tools from store:', error);
+      showToast('error', t('common.error'), t('tools.store.fetchFailed', '获取商店工具失败'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
-      setLoading(true);
-      const timer = setTimeout(() => {
-        setLoading(false);
-      }, 800);
-      return () => clearTimeout(timer);
+      fetchCategories();
     }
-    return undefined;
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchTools();
+    }
+  }, [isOpen, selectedCategory, searchQuery]);
 
   // Check if a tool is already installed in the project
   const installedToolNames = useMemo(() => {
     return new Set(aiTools.map(t => t.name.toLowerCase()));
   }, [aiTools]);
 
-  const filteredTools = useMemo(() => {
-    return searchTools(searchQuery, selectedCategory);
-  }, [searchQuery, selectedCategory]);
-
-  const handleToolClick = (tool: ToolStoreItem) => {
+  const handleToolClick = async (tool: ToolStoreItem) => {
+    // 先显示基础信息
     setSelectedTool(tool);
     setIsDetailOpen(true);
+    
+    // 异步加载完整详情 (包括 methods 等)
+    try {
+      const fullTool = await toolStoreApi.getTool(tool.id);
+      if (fullTool) {
+        setSelectedTool(fullTool);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tool detail:', error);
+    }
   };
 
   const handleInstall = async (e: React.MouseEvent | ToolStoreItem, toolInput?: ToolStoreItem) => {
-    // Handle both event-based and direct item-based calls
     const tool = toolInput || (e as ToolStoreItem);
     if (e && (e as React.MouseEvent).stopPropagation) {
       (e as React.MouseEvent).stopPropagation();
     }
 
-    // AUTH CHECK: Must be logged in to install
+    // AUTH CHECK
     if (!isAuthenticated) {
       setShowLoginModal(true);
       return;
@@ -76,11 +138,13 @@ const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
     setInstallingId(tool.id);
     
     try {
-      // Simulate installation API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // In a real app, we would call an API like:
-      // await apiClient.post(`/v1/tool-store/tools/${tool.id}/install`);
+      // 1. 确保凭证已绑定到项目
+      if (projectId) {
+        await bindToProject(projectId);
+      }
+
+      // 2. 在工具商店安装
+      await toolStoreApi.installTool(tool.id);
       
       showToast('success', t('tools.store.installSuccess', '安装成功'), t('tools.store.installSuccessMessage', { name: tool.name }));
       
@@ -122,7 +186,7 @@ const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
               </div>
 
               <nav className="space-y-1">
-                {TOOL_STORE_CATEGORIES.map(cat => {
+                {categories.map((cat: ToolStoreCategory) => {
                   const IconComponent = ({
                     Grid3X3,
                     Brain,
@@ -132,18 +196,20 @@ const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
                     Package
                   } as any)[cat.icon] || Filter;
 
+                  const displayName = currentLang === 'zh' ? cat.name_zh : (cat.name_en || cat.name_zh);
+
                   return (
                     <button
                       key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
+                      onClick={() => setSelectedCategory(cat.slug)}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
-                        selectedCategory === cat.id
+                        selectedCategory === cat.slug
                           ? 'bg-blue-600 text-white shadow-lg shadow-blue-100 dark:shadow-none'
                           : 'text-gray-500 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                       }`}
                     >
-                      <IconComponent className={`w-4 h-4 ${selectedCategory === cat.id ? 'opacity-100' : 'opacity-50'}`} />
-                      {t(`tools.store.categories.${cat.id}`, cat.label)}
+                      <IconComponent className={`w-4 h-4 ${selectedCategory === cat.slug ? 'opacity-100' : 'opacity-50'}`} />
+                      {displayName}
                     </button>
                   );
                 })}
@@ -179,17 +245,24 @@ const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
                   <div className="hidden sm:flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-800">
                     <div className="text-right">
                       <div className="text-xs font-black text-gray-900 dark:text-gray-100 truncate max-w-[100px]">
-                        {user?.nickname || user?.username}
+                        {user?.name || user?.email}
                       </div>
-                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Verified Account</div>
+                      <div className="text-[10px] text-blue-600 font-bold uppercase tracking-tighter">
+                        Balance: ${user?.credits?.toFixed(2)}
+                      </div>
                     </div>
-                    {user?.avatar_url ? (
-                      <img src={user.avatar_url} alt="" className="w-9 h-9 rounded-xl object-cover border border-gray-100 dark:border-gray-800" />
-                    ) : (
-                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-sm">
-                        {user?.nickname?.charAt(0).toUpperCase() || user?.username?.charAt(0).toUpperCase()}
+                    <div className="relative group">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-sm cursor-pointer">
+                        {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase()}
                       </div>
-                    )}
+                      <button 
+                        onClick={() => logout()}
+                        className="absolute top-full right-0 mt-2 p-2 bg-white dark:bg-gray-800 shadow-xl rounded-xl border border-gray-100 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex items-center gap-2 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 whitespace-nowrap z-50"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        退出登录
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -210,7 +283,7 @@ const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
                     <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
                     <p className="text-sm font-bold text-gray-400 animate-pulse">{t('common.loading', '加载中...')}</p>
                   </div>
-                ) : filteredTools.length === 0 ? (
+                ) : !tools || tools.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-[500px] text-center">
                     <div className="w-20 h-20 rounded-3xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-300 dark:text-gray-700 mb-6">
                       <Search className="w-10 h-10" />
@@ -220,7 +293,7 @@ const ToolStoreModal: React.FC<ToolStoreModalProps> = ({ isOpen, onClose }) => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    {filteredTools.map(tool => (
+                    {tools.map(tool => (
                       <ToolStoreCard 
                         key={tool.id} 
                         tool={tool} 

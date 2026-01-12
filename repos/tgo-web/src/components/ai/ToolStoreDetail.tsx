@@ -1,8 +1,8 @@
-import React from 'react';
-import { X, Star, Download, ShieldCheck, Calendar, Info, History, Code, Check } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, ShieldCheck, Calendar, Info, Check, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import MarkdownContent from '../chat/MarkdownContent';
-import type { ToolStoreItem } from '@/types';
+import type { ToolStoreItem, ToolMethod, ToolParameter } from '@/types';
 
 interface ToolStoreDetailProps {
   tool: ToolStoreItem | null;
@@ -21,11 +21,49 @@ const ToolStoreDetail: React.FC<ToolStoreDetailProps> = ({
   isInstalled,
   installingId
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language.startsWith('zh') ? 'zh' : 'en';
+
+  // 管理方法的展开状态
+  const [expandedMethods, setExpandedMethods] = useState<Record<string, boolean>>({});
+
+  const toggleMethod = (methodId: string) => {
+    setExpandedMethods(prev => ({
+      ...prev,
+      [methodId]: !prev[methodId]
+    }));
+  };
+
+  // 统一解析工具方法 (兼容旧的 methods 数组和新的 config.methods 对象)
+  const methods = useMemo(() => {
+    if (!tool) return [];
+    if (tool.methods && tool.methods.length > 0) return tool.methods;
+    
+    const configMethods = tool.config?.methods;
+    if (configMethods && typeof configMethods === 'object') {
+      return Object.entries(configMethods).map(([name, def]: [string, any]) => ({
+        id: name,
+        name: name,
+        description: def.description || '',
+        parameters: def.params || [],
+        returnType: 'any'
+      }));
+    }
+    
+    return [];
+  }, [tool?.methods, tool?.config]);
 
   if (!tool) return null;
 
   const isInstalling = installingId === tool.id;
+
+  const title = currentLang === 'zh' 
+    ? (tool.title_zh || tool.title || tool.name) 
+    : (tool.title_en || tool.title_zh || tool.title || tool.name);
+  
+  const description = currentLang === 'zh'
+    ? (tool.description_zh || tool.description)
+    : (tool.description_en || tool.description_zh || tool.description);
 
   return (
     <>
@@ -85,7 +123,7 @@ const ToolStoreDetail: React.FC<ToolStoreDetailProps> = ({
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-3xl font-black text-gray-900 dark:text-gray-100 tracking-tight">
-                      {tool.name}
+                      {title}
                     </h1>
                     {tool.verified && (
                       <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-lg border border-blue-100 dark:border-blue-800">
@@ -95,26 +133,17 @@ const ToolStoreDetail: React.FC<ToolStoreDetailProps> = ({
                     )}
                   </div>
                   <p className="text-gray-500 dark:text-gray-400 font-medium text-lg mt-1">
-                    {tool.author} <span className="text-gray-300 dark:text-gray-600 mx-2">@</span>{tool.authorHandle}
+                    {tool.author || 'TGO'} <span className="text-gray-300 dark:text-gray-600 mx-2">@</span>{tool.authorHandle || 'tgo'}
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-6 items-center">
-                  <div className="flex items-center gap-1.5">
-                    <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
-                    <span className="font-black text-gray-900 dark:text-gray-100">{tool.rating}</span>
-                    <span className="text-sm text-gray-400">({tool.ratingCount} {t('tools.store.rating', '评分')})</span>
-                  </div>
-                  <div className="h-4 w-px bg-gray-200 dark:bg-gray-800"></div>
-                  <div className="flex items-center gap-1.5">
-                    <Download className="w-5 h-5 text-gray-400" />
-                    <span className="font-black text-gray-900 dark:text-gray-100">{tool.downloads.toLocaleString()}</span>
-                    <span className="text-sm text-gray-400">{t('tools.store.downloads', '下载量')}</span>
-                  </div>
-                </div>
-
                 <div className="flex flex-wrap gap-2">
-                  {tool.tags.map(tag => (
+                  {tool.categories && tool.categories.map(cat => (
+                    <span key={cat.id} className="px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs rounded-xl font-bold border border-blue-100 dark:border-blue-800">
+                      {currentLang === 'zh' ? cat.name_zh : (cat.name_en || cat.name_zh)}
+                    </span>
+                  ))}
+                  {tool.tags && tool.tags.map(tag => (
                     <span key={tag} className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-xs rounded-xl font-bold border border-gray-200/50 dark:border-gray-700/50">
                       {tag}
                     </span>
@@ -124,34 +153,31 @@ const ToolStoreDetail: React.FC<ToolStoreDetailProps> = ({
             </div>
 
             {/* Meta Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1 flex items-center gap-1.5">
                   <Info className="w-3 h-3" />
-                  {t('tools.store.version', '版本')}
+                  {t('tools.store.type', '类型')}
                 </div>
-                <div className="text-sm font-bold text-gray-900 dark:text-gray-100">v{tool.version}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-gray-100 uppercase">{(tool as any).type || 'MCP'}</div>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1 flex items-center gap-1.5">
                   <Calendar className="w-3 h-3" />
-                  {t('tools.store.lastUpdated', '最后更新')}
+                  {t('tools.store.createdAt', '发布时间')}
                 </div>
-                <div className="text-sm font-bold text-gray-900 dark:text-gray-100">{tool.lastUpdated}</div>
+                <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                  {(tool as any).created_at ? new Date((tool as any).created_at).toLocaleDateString() : '-'}
+                </div>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1 flex items-center gap-1.5">
-                  <Code className="w-3 h-3" />
-                  {t('tools.store.requirements', '运行环境')}
+                  <Sparkles className="w-3 h-3" />
+                  {t('tools.store.price', '费用')}
                 </div>
-                <div className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">{tool.requirements.join(', ') || 'None'}</div>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1 flex items-center gap-1.5">
-                  <History className="w-3 h-3" />
-                  {t('tools.store.changelog', '更新日志')}
+                <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                  {(tool as any).price_per_call > 0 ? `¥${(tool as any).price_per_call} / call` : t('tools.store.free', '免费')}
                 </div>
-                <div className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">{tool.changelog}</div>
               </div>
             </div>
 
@@ -164,55 +190,79 @@ const ToolStoreDetail: React.FC<ToolStoreDetailProps> = ({
                 {tool.longDescription ? (
                   <MarkdownContent content={tool.longDescription} className="!max-w-none" />
                 ) : (
-                  tool.description
+                  description
                 )}
               </div>
             </div>
 
             {/* Methods / API Section */}
-            {tool.methods && tool.methods.length > 0 && (
+            {methods.length > 0 && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 pb-2 border-b border-gray-100 dark:border-gray-800">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 pb-2 border-b border-gray-100 dark:border-gray-700">
                   可用方法 (Methods)
                 </h3>
                 <div className="space-y-4">
-                  {tool.methods.map(method => (
-                    <div key={method.id} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden">
-                      <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                        <code className="text-blue-600 dark:text-blue-400 font-mono font-bold">{method.name}()</code>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{method.returnType}</span>
-                      </div>
-                      <div className="p-5 space-y-4">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{method.description}</p>
-                        
-                        {method.parameters.length > 0 && (
-                          <div className="space-y-2">
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">参数 (Parameters)</div>
-                            <div className="space-y-2">
-                              {method.parameters.map(param => (
-                                <div key={param.name} className="flex gap-4 text-xs">
-                                  <div className="w-24 flex-shrink-0">
-                                    <code className="text-gray-900 dark:text-gray-100 font-mono font-bold">{param.name}</code>
-                                    <div className="text-[10px] text-gray-400">{param.type}{param.required && <span className="text-red-500 ml-1">*</span>}</div>
-                                  </div>
-                                  <div className="flex-1 text-gray-500 dark:text-gray-400">{param.description}</div>
-                                </div>
-                              ))}
+                  {methods.map((method: ToolMethod) => {
+                    const isExpanded = expandedMethods[method.id];
+                    return (
+                      <div key={method.id} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden shadow-sm">
+                        <div 
+                          className={`px-5 py-3 bg-gray-50/50 dark:bg-gray-800/80 ${isExpanded ? 'border-b border-gray-100 dark:border-gray-700' : ''} flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                          onClick={() => toggleMethod(method.id)}
+                        >
+                          <div className="flex flex-1 items-center gap-3 min-w-0">
+                            <div className="flex-shrink-0">
+                              {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:items-center min-w-0 gap-0.5 sm:gap-3">
+                              <code className="text-blue-600 dark:text-blue-400 font-mono font-bold text-sm">{method.name}()</code>
+                              {!isExpanded && method.description && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400 truncate sm:border-l sm:border-gray-200 dark:sm:border-gray-700 sm:pl-3 font-medium">
+                                  {method.description}
+                                </span>
+                              )}
                             </div>
                           </div>
-                        )}
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex-shrink-0 ml-4">{method.returnType}</span>
+                        </div>
+                        
+                        {isExpanded && (
+                          <div className="p-5 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{method.description}</p>
+                            
+                            {method.parameters && method.parameters.length > 0 && (
+                              <div className="space-y-2">
+                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">参数 (Parameters)</div>
+                                <div className="grid grid-cols-1 gap-2">
+                                  {method.parameters.map((param: ToolParameter) => (
+                                    <div key={param.name} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100/50 dark:border-gray-800/50">
+                                      <div className="w-32 flex-shrink-0">
+                                        <code className="text-gray-900 dark:text-gray-100 font-mono font-bold text-xs">{param.name}</code>
+                                        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter mt-0.5">
+                                          {param.type}
+                                          {param.required && <span className="text-red-500 ml-1">*</span>}
+                                        </div>
+                                      </div>
+                                      <div className="flex-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{param.description}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
-                        {method.example && (
-                          <div className="space-y-2 pt-2">
-                            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">示例 (Example)</div>
-                            <pre className="p-3 bg-gray-900 rounded-xl text-xs text-blue-300 font-mono overflow-x-auto">
-                              {method.example}
-                            </pre>
+                            {method.example && (
+                              <div className="space-y-2 pt-2">
+                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">示例 (Example)</div>
+                                <pre className="p-4 bg-gray-900 rounded-xl text-xs text-blue-300 font-mono overflow-x-auto shadow-inner">
+                                  {method.example}
+                                </pre>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

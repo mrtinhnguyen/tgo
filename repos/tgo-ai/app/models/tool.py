@@ -28,6 +28,12 @@ class ToolType(str, Enum):
     ALL = "ALL"
 
 
+class ToolSourceType(str, Enum):
+    """Tool source type enumeration."""
+    LOCAL = "LOCAL"           # 本地配置的工具
+    TOOLSTORE = "TOOLSTORE"   # 从商店安装的工具
+
+
 class Tool(BaseModel):
     """Project-level tool configuration."""
 
@@ -70,6 +76,20 @@ class Tool(BaseModel):
         String(1024),
         nullable=True,
         comment="Endpoint URL or path",
+    )
+
+    # Tool Store integration
+    tool_source_type: Mapped[ToolSourceType] = mapped_column(
+        SAEnum(ToolSourceType, name="tool_source_type_enum"),
+        nullable=False,
+        default=ToolSourceType.LOCAL,
+        comment="Tool source (LOCAL or TOOLSTORE)",
+    )
+
+    toolstore_tool_id: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Associated ToolStore tool ID",
     )
 
     # JSONB configuration (provider- or tool-specific settings)

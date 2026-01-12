@@ -4,12 +4,12 @@ import type { ToolStoreItem, ToolStoreCategory } from '@/types';
  * Tool Store Categories
  */
 export const TOOL_STORE_CATEGORIES: ToolStoreCategory[] = [
-  { id: 'all', label: '全部', icon: 'Grid3X3' },
-  { id: 'model', label: '模型', icon: 'Brain' },
-  { id: 'tool', label: '工具', icon: 'Wrench' },
-  { id: 'agent', label: 'Agent 策略', icon: 'Bot' },
-  { id: 'extension', label: '扩展', icon: 'Puzzle' },
-  { id: 'plugin', label: '插件库', icon: 'Package' },
+  { id: 'all', slug: 'all', name_zh: '全部', name_en: 'All', icon: 'Grid3X3', label: '全部' },
+  { id: 'model', slug: 'model', name_zh: '模型', name_en: 'Models', icon: 'Brain', label: '模型' },
+  { id: 'tool', slug: 'tool', name_zh: '工具', name_en: 'Tools', icon: 'Wrench', label: '工具' },
+  { id: 'agent', slug: 'agent', name_zh: 'Agent 策略', name_en: 'Agent Strategies', icon: 'Bot', label: 'Agent 策略' },
+  { id: 'extension', slug: 'extension', name_zh: '扩展', name_en: 'Extensions', icon: 'Puzzle', label: '扩展' },
+  { id: 'plugin', slug: 'plugin', name_zh: '插件库', name_en: 'Plugins', icon: 'Package', label: '插件库' },
 ];
 
 /**
@@ -23,6 +23,7 @@ export const mockToolStoreItems: ToolStoreItem[] = [
     author: 'langgenius',
     authorHandle: 'mcp_sse',
     category: 'tool',
+    categories: [TOOL_STORE_CATEGORIES[2]], // 工具
     tags: ['HTTP', 'SSE', 'Streamable', 'Tool'],
     downloads: 71652,
     rating: 4.8,
@@ -112,6 +113,7 @@ export const mockToolStoreItems: ToolStoreItem[] = [
     author: 'langgenius',
     authorHandle: 'tavily',
     category: 'tool',
+    categories: [TOOL_STORE_CATEGORIES[2]], // 工具
     tags: ['Search', 'AI', 'Web', 'Real-time'],
     downloads: 69261,
     rating: 4.9,
@@ -198,6 +200,7 @@ export const mockToolStoreItems: ToolStoreItem[] = [
     author: 'langgenius',
     authorHandle: 'json_process',
     category: 'tool',
+    categories: [TOOL_STORE_CATEGORIES[2]], // 工具
     tags: ['JSON', 'Processing', 'Data'],
     downloads: 65407,
     rating: 4.7,
@@ -219,6 +222,7 @@ export const mockToolStoreItems: ToolStoreItem[] = [
     author: 'bowenliang123',
     authorHandle: 'md_exporter',
     category: 'tool',
+    categories: [TOOL_STORE_CATEGORIES[2]], // 工具
     tags: ['Markdown', 'Export', 'Document'],
     downloads: 62648,
     rating: 4.6,
@@ -240,6 +244,7 @@ export const mockToolStoreItems: ToolStoreItem[] = [
     author: 'langgenius',
     authorHandle: 'google',
     category: 'tool',
+    categories: [TOOL_STORE_CATEGORIES[2]], // 工具
     tags: ['Google', 'Search', 'SERP'],
     downloads: 53954,
     rating: 4.5,
@@ -261,6 +266,7 @@ export const mockToolStoreItems: ToolStoreItem[] = [
     author: 'langgenius',
     authorHandle: 'firecrawl',
     category: 'tool',
+    categories: [TOOL_STORE_CATEGORIES[2]], // 工具
     tags: ['Web Scraping', 'API', 'Data'],
     downloads: 39930,
     rating: 4.4,
@@ -308,9 +314,9 @@ export const searchTools = (query: string, categoryId?: string): ToolStoreItem[]
 
   const searchTerm = query.toLowerCase().trim();
   return tools.filter(tool =>
-    tool.name.toLowerCase().includes(searchTerm) ||
-    tool.description.toLowerCase().includes(searchTerm) ||
-    tool.author.toLowerCase().includes(searchTerm) ||
-    tool.tags.some(tag => tag.toLowerCase().includes(searchTerm))
+    (tool.name?.toLowerCase().includes(searchTerm)) ||
+    (tool.description?.toLowerCase().includes(searchTerm)) ||
+    (tool.author?.toLowerCase().includes(searchTerm)) ||
+    (tool.tags?.some(tag => tag.toLowerCase().includes(searchTerm)))
   );
 };

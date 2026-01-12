@@ -17,6 +17,12 @@ class ToolType(str, Enum):
     ALL = "ALL"
 
 
+class ToolSourceType(str, Enum):
+    """Tool source type enumeration."""
+    LOCAL = "LOCAL"
+    TOOLSTORE = "TOOLSTORE"
+
+
 class ToolCreateRequest(BaseSchema):
     """Schema for creating a tool."""
 
@@ -25,6 +31,8 @@ class ToolCreateRequest(BaseSchema):
     tool_type: ToolType = Field(..., description="Tool type (MCP | FUNCTION)")
     transport_type: Optional[str] = Field(None, description="Transport type (e.g., http, stdio, sse)")
     endpoint: Optional[str] = Field(None, description="Endpoint URL or path")
+    tool_source_type: ToolSourceType = Field(ToolSourceType.LOCAL, description="Tool source (LOCAL or TOOLSTORE)")
+    toolstore_tool_id: Optional[str] = Field(None, description="Associated ToolStore tool ID")
     config: Optional[Dict[str, Any]] = Field(None, description="Tool configuration JSON object")
 
 
@@ -52,5 +60,7 @@ class ToolResponse(BaseSchema):
     tool_type: ToolType = Field(..., description="Tool type (MCP | FUNCTION)")
     transport_type: Optional[str] = Field(None, description="Transport type (e.g., http, stdio, sse)")
     endpoint: Optional[str] = Field(None, description="Endpoint URL or path")
+    tool_source_type: ToolSourceType = Field(ToolSourceType.LOCAL, description="Tool source (LOCAL or TOOLSTORE)")
+    toolstore_tool_id: Optional[str] = Field(None, description="Associated ToolStore tool ID")
     config: Optional[Dict[str, Any]] = Field(None, description="Tool configuration JSON object")
 

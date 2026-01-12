@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Download, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ToolStoreItem } from '@/types';
 
@@ -11,7 +11,16 @@ interface ToolStoreCardProps {
 }
 
 const ToolStoreCard: React.FC<ToolStoreCardProps> = ({ tool, onClick, onInstall, isInstalled }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.language.startsWith('zh') ? 'zh' : 'en';
+
+  const title = currentLang === 'zh' 
+    ? (tool.title_zh || tool.title || tool.name) 
+    : (tool.title_en || tool.title_zh || tool.title || tool.name);
+  
+  const description = currentLang === 'zh'
+    ? (tool.description_zh || tool.description)
+    : (tool.description_en || tool.description_zh || tool.description);
 
   return (
     <div 
@@ -36,40 +45,27 @@ const ToolStoreCard: React.FC<ToolStoreCardProps> = ({ tool, onClick, onInstall,
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
             <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-              {tool.name}
+              {title}
             </h3>
             {tool.verified && (
               <ShieldCheck className="w-4 h-4 text-blue-500 flex-shrink-0" />
             )}
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-            {tool.author}
+            {tool.author || 'TGO'}
           </p>
         </div>
       </div>
 
       {/* Description */}
       <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 h-10 mb-4 leading-relaxed">
-        {tool.description}
+        {description}
       </p>
-
-      {/* Stats */}
-      <div className="flex items-center gap-4 text-[11px] text-gray-500 dark:text-gray-500 mb-5">
-        <div className="flex items-center gap-1">
-          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-          <span className="font-bold text-gray-700 dark:text-gray-300">{tool.rating}</span>
-          <span className="opacity-70">({tool.ratingCount})</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Download className="w-3.5 h-3.5" />
-          <span>{tool.downloads > 1000 ? `${(tool.downloads / 1000).toFixed(1)}k` : tool.downloads}</span>
-        </div>
-      </div>
 
       {/* Footer / Actions */}
       <div className="flex items-center justify-between gap-3 pt-4 border-t border-gray-50 dark:border-gray-700/50">
         <div className="flex flex-wrap gap-1 items-center">
-          {tool.tags.slice(0, 2).map(tag => (
+          {tool.tags && tool.tags.slice(0, 2).map(tag => (
             <span 
               key={tag} 
               className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-[10px] rounded-md font-medium"
@@ -77,7 +73,7 @@ const ToolStoreCard: React.FC<ToolStoreCardProps> = ({ tool, onClick, onInstall,
               {tag}
             </span>
           ))}
-          {tool.tags.length > 2 && (
+          {tool.tags && tool.tags.length > 2 && (
             <span className="text-[10px] text-gray-400 font-medium">+{tool.tags.length - 2}</span>
           )}
         </div>

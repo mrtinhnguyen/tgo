@@ -394,8 +394,12 @@ export interface ModelQueryParams {
 export interface ToolSummary {
   id: string;
   name: string;
-  title?: string; // Display title for the tool (may be different from name)
+  title?: string; // Legacy field (deprecated)
+  title_zh?: string | null;
+  title_en?: string | null;
   description: string | null;
+  description_zh?: string | null;
+  description_en?: string | null;
   version: string;
   category: string | null;
   tags: string[];
@@ -423,8 +427,12 @@ export interface ToolListResponse {
 export interface ToolResponse {
   id: string;
   name: string;
-  title?: string; // Display title for the tool (may be different from name)
+  title?: string; // Legacy field (deprecated)
+  title_zh?: string | null;
+  title_en?: string | null;
   description: string | null;
+  description_zh?: string | null;
+  description_en?: string | null;
   version: string;
   category: string | null;
   tags: string[];
@@ -565,27 +573,67 @@ export interface AiToolUpdateRequest {
 }
 
 // Tool Store Types
+export interface ToolStoreUser {
+  id: string;
+  name: string;
+  email: string;
+  credits: number;
+  status: string;
+  api_key: string;
+}
+
+export interface ToolStoreLoginResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+  api_key: string;
+  user: ToolStoreUser;
+}
+
+export interface ToolStoreRefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+export interface ToolStoreCredential {
+  id: string;
+  project_id: string;
+  toolstore_user_id: string;
+  toolstore_email: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ToolStoreItem {
   id: string;
   name: string;
-  title?: string; // Display title for the tool (may be different from name)
+  title?: string; // Legacy field (deprecated)
+  title_zh?: string | null;
+  title_en?: string | null;
   description: string;
-  author: string;
-  authorHandle: string;
-  category: string;
+  description_zh?: string | null;
+  description_en?: string | null;
+  author?: string;
+  authorHandle?: string;
+  category?: string; // Legacy field (deprecated)
+  categories: ToolStoreCategory[]; // New field for many-to-many relationship
   tags: string[];
-  downloads: number;
-  rating: number;
-  ratingCount: number;
-  version: string;
-  lastUpdated: string;
-  featured: boolean;
-  verified: boolean;
-  icon: string;
-  screenshots: string[];
-  longDescription: string;
-  requirements: string[];
-  changelog:string;
+  downloads?: number;
+  rating?: number;
+  ratingCount?: number;
+  version?: string;
+  lastUpdated?: string;
+  featured?: boolean;
+  verified?: boolean;
+  icon?: string;
+  screenshots?: string[];
+  longDescription?: string;
+  requirements?: string[];
+  changelog?: string;
+  config?: Record<string, any>;
   methods?: ToolMethod[];
   isInstalled?: boolean; // Whether the tool is already installed in the project
   input_schema?: Record<string, any>; // Schema from API response
@@ -594,8 +642,11 @@ export interface ToolStoreItem {
 
 export interface ToolStoreCategory {
   id: string;
-  label: string;
+  slug: string; // Unique identifier for URL/filtering
+  name_zh: string;
+  name_en: string | null;
   icon: string;
+  label?: string; // For backward compatibility with older UI code
 }
 
 // Tool Method Types

@@ -1,6 +1,6 @@
 """Application configuration using Pydantic Settings."""
 
-from typing import List, Union
+from typing import List, Union, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -86,6 +86,16 @@ class Settings(BaseSettings):
     plugin_runtime_url: str = Field(
         default="http://localhost:8090",
         description="Base URL for the plugin runtime service",
+    )
+
+    # ToolStore Configuration
+    toolstore_service_url: str = Field(
+        default="https://toolstore.example.com",
+        description="Base URL for the ToolStore service"
+    )
+    toolstore_api_key: Optional[str] = Field(
+        default=None,
+        description="API Key for the ToolStore service"
     )
 
     # Server Configuration
