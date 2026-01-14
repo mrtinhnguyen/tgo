@@ -59,6 +59,10 @@ class SearchResult(BaseModel):
         None,
         description="Document tags and metadata"
     )
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Additional metadata including source info"
+    )
     created_at: datetime = Field(
         ...,
         description="Document creation timestamp"

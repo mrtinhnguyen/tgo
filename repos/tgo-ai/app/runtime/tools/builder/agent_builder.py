@@ -324,6 +324,7 @@ class AgentBuilder:
                     rag_config.rag_url,
                     collection,
                     project_id=rag_config.project_id,
+                    filters=rag_config.filters,
                 )
                 tools.append(tool)
             except Exception as exc:  # noqa: BLE001

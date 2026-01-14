@@ -320,6 +320,11 @@ class CollectionSearchRequest(BaseModel):
             }
         ]
     )
+    search_mode: str = Field(
+        default="hybrid",
+        description="Search mode: 'hybrid' (default), 'embedding', or 'fulltext'",
+        examples=["hybrid"]
+    )
 
 
 class CollectionListResponse(BaseModel):

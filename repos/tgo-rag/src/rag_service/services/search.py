@@ -2,6 +2,7 @@
 Search service implementing hybrid search with vector similarity and keyword matching.
 """
 
+import asyncio
 import time
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
@@ -16,6 +17,7 @@ from ..models import FileDocument
 from ..schemas.search import SearchMetadata, SearchResult, SearchResponse
 from .vector_store import get_vector_store_service
 from .embedding import get_embedding_service_for_project
+from .query_processor import get_query_processor
 
 logger = get_logger(__name__)
 
@@ -97,6 +99,7 @@ class SearchService:
                             page_number=document_info.get("page_number"),
                             section_title=document_info.get("section_title"),
                             tags=document_info.get("tags"),
+                            metadata=document_info.get("metadata", {}),
                             created_at=document_info["created_at"],
                         )
                         search_results.append(search_result)
@@ -147,51 +150,63 @@ class SearchService:
         start_time = time.time()
 
         try:
+            from ..models import File as FileModel
             async with get_db_session() as db:
-                # Build base query with project filtering
-                base_query = select(
-                    FileDocument,
-                    func.ts_rank_cd(
-                        func.to_tsvector('english', FileDocument.content),
-                        func.plainto_tsquery('english', query)
-                    ).label('rank')
-                ).where(
-                    and_(
-                        func.to_tsvector('english', FileDocument.content).op('@@')(
-                            func.plainto_tsquery('english', query)
-                        ),
-                        FileDocument.content.isnot(None),
-                        FileDocument.project_id == project_id
-                    )
-                )
-
-                # Apply collection filter
-                if collection_id:
-                    base_query = base_query.where(FileDocument.collection_id == collection_id)
+                # Detect if query has Chinese characters
+                has_chinese = any('\u4e00' <= char <= '\u9fff' for char in query)
                 
-                # Apply additional filters
-                if filters:
-                    if "content_type" in filters:
-                        if isinstance(filters["content_type"], list):
-                            base_query = base_query.where(
-                                FileDocument.content_type.in_(filters["content_type"])
-                            )
-                        else:
-                            base_query = base_query.where(
-                                FileDocument.content_type == filters["content_type"]
-                            )
-                    
-                    if "language" in filters:
-                        base_query = base_query.where(FileDocument.language == filters["language"])
-                    
-                    if "min_confidence" in filters:
-                        base_query = base_query.where(
-                            FileDocument.confidence_score >= filters["min_confidence"]
+                # Build query using trigram similarity for Chinese and TSV for English
+                if has_chinese:
+                    # Trigram similarity matching for Chinese (requires pg_trgm)
+                    # We also combine with ILIKE for exact substring matching
+                    base_query = select(
+                        FileDocument,
+                        FileModel,
+                        func.similarity(FileDocument.content, query).label('rank')
+                    ).outerjoin(
+                        FileModel, FileDocument.file_id == FileModel.id
+                    ).where(
+                        and_(
+                            or_(
+                                FileDocument.content.op('%')(query),
+                                FileDocument.content.ilike(f"%{query}%")
+                            ),
+                            FileDocument.project_id == project_id
                         )
-                
+                    )
+                else:
+                    # Standard TSV for English/other languages
+                    base_query = select(
+                        FileDocument,
+                        FileModel,
+                        func.ts_rank_cd(
+                            FileDocument.content_tsv,
+                            func.websearch_to_tsquery('english', query) # Use english for non-chinese
+                        ).label('rank')
+                    ).outerjoin(
+                        FileModel, FileDocument.file_id == FileModel.id
+                    ).where(
+                        and_(
+                            FileDocument.content_tsv.op('@@')(
+                                func.websearch_to_tsquery('english', query)
+                            ),
+                            FileDocument.project_id == project_id
+                        )
+                    )
+
+                # Apply content_type filter
+                if filters and "content_type" in filters:
+                    content_types = filters["content_type"]
+                    if isinstance(content_types, list):
+                        base_query = base_query.where(FileDocument.content_type.in_(content_types))
+                    else:
+                        base_query = base_query.where(FileDocument.content_type == content_types)
+
                 # Apply score threshold and ordering
-                if min_score > 0:
-                    base_query = base_query.having(text(f"ts_rank_cd(to_tsvector('english', content), plainto_tsquery('english', :query)) >= {min_score}"))
+                if min_score > 0 and not has_chinese:
+                    base_query = base_query.where(text(f"ts_rank_cd(content_tsv, websearch_to_tsquery('english', :query)) >= {min_score}"))
+                elif min_score > 0 and has_chinese:
+                    base_query = base_query.where(func.similarity(FileDocument.content, query) >= min_score)
                 
                 base_query = base_query.order_by(text("rank DESC")).limit(limit)
                 
@@ -201,7 +216,8 @@ class SearchService:
                 
                 # Convert to search results
                 search_results = []
-                for document, rank in rows:
+                for document, file, rank in rows:
+                    source_name = file.original_filename if file else "Unknown"
                     search_result = SearchResult(
                         document_id=document.id,
                         file_id=document.file_id,
@@ -214,9 +230,16 @@ class SearchService:
                         page_number=document.page_number,
                         section_title=document.section_title,
                         tags=document.tags,
+                        metadata={
+                            "source": source_name,
+                            "filename": source_name,
+                            "file_size": file.file_size if file else 0
+                        },
                         created_at=document.created_at,
                     )
                     search_results.append(search_result)
+                
+                logger.debug(f"[KeywordSearch] Found {len(search_results)} results for query '{query}'")
                 
                 # Create search metadata
                 search_time_ms = int((time.time() - start_time) * 1000)
@@ -248,85 +271,119 @@ class SearchService:
         filters: Optional[Dict[str, Any]] = None
     ) -> SearchResponse:
         """
-        Perform hybrid search using PGVectorStore's built-in hybrid search capabilities.
-
-        This method leverages PGVectorStore's native hybrid search which combines
-        semantic vector search with PostgreSQL's full-text search (TSV) capabilities
-        using reciprocal rank fusion for optimal results.
-
-        Args:
-            query: Search query text
-            project_id: Project ID for multi-tenant isolation
-            collection_id: Optional collection to search within
-            limit: Maximum number of results
-            min_score: Minimum combined score threshold
-            semantic_weight: Weight for semantic search (kept for API compatibility, not used)
-            keyword_weight: Weight for keyword search (kept for API compatibility, not used)
-            filters: Additional filters to apply
-
-        Returns:
-            SearchResponse with hybrid search results using native PGVectorStore capabilities
+        Perform hybrid search with RRF fusion, optional reranking, and traceability metadata.
         """
         start_time = time.time()
-
         try:
-            # Build filter dictionary for project and collection filtering
-            filter_dict = {"project_id": {"$eq": project_id}}
-            if collection_id:
-                filter_dict["collection_id"] = {"$eq": collection_id}
-
-            # Add any additional filters
-            if filters:
-                filter_dict.update(filters)
-
-            # Use PGVectorStore's per-project hybrid (vector) search by binding the project's embedding client
-            embedding_service = await get_embedding_service_for_project(project_id)
-            vector_results = await self.vector_store_service.similarity_search_for_project(
-                query=query,
-                project_key=str(project_id),
-                embeddings_client=embedding_service.embeddings_client,
-                k=limit,
-                filter_dict=filter_dict,
-                score_threshold=min_score,
-            )
-
-            # Convert vector store results to SearchResult objects
-            search_results = []
-            for doc, score in vector_results:
-                document_id = doc.id
-                if document_id:
-                    # Get additional document info from database
-                    document_info = await self._get_document_info(UUID(document_id), project_id)
-                    if document_info:
-                        search_result = SearchResult(
-                            document_id=UUID(document_id),
-                            file_id=document_info.get("file_id"),
-                            collection_id=document_info.get("collection_id"),
-                            relevance_score=float(score),
-                            content_preview=doc.page_content,
-                            document_title=document_info.get("document_title"),
-                            content_type=document_info.get("content_type"),
-                            chunk_index=document_info.get("chunk_index"),
-                            page_number=document_info.get("page_number"),
-                            section_title=document_info.get("section_title"),
-                            tags=document_info.get("tags", {}),
-                            created_at=document_info.get("created_at"),
-                        )
-                        search_results.append(search_result)
+            # 0. Query preprocessing - expand query for better recall
+            processor = get_query_processor()
+            query_variants = await processor.expand_query(query)
+            
+            # 1. Candidate Retrieval (Semantic + Keyword)
+            # Use configurable candidate multiplier for better reranking quality
+            candidate_limit = limit * self.settings.candidate_multiplier
+            
+            # Multi-query retrieval for better recall
+            all_semantic_results = []
+            all_keyword_results = []
+            
+            for q in query_variants:
+                semantic_task = self.semantic_search(
+                    query=q,
+                    project_id=project_id,
+                    collection_id=collection_id,
+                    limit=candidate_limit,
+                    min_score=min_score,
+                    filters=filters
+                )
+                
+                keyword_task = self.keyword_search(
+                    query=q,
+                    project_id=project_id,
+                    collection_id=collection_id,
+                    limit=candidate_limit,
+                    min_score=min_score,
+                    filters=filters
+                )
+                
+                semantic_res, keyword_res = await asyncio.gather(semantic_task, keyword_task)
+                all_semantic_results.extend(semantic_res.results)
+                all_keyword_results.extend(keyword_res.results)
+            
+            # Deduplicate results while preserving order
+            seen_semantic = set()
+            unique_semantic = []
+            for r in all_semantic_results:
+                if r.document_id not in seen_semantic:
+                    seen_semantic.add(r.document_id)
+                    unique_semantic.append(r)
+            
+            seen_keyword = set()
+            unique_keyword = []
+            for r in all_keyword_results:
+                if r.document_id not in seen_keyword:
+                    seen_keyword.add(r.document_id)
+                    unique_keyword.append(r)
+            
+            # 2. RRF Fusion (configurable k parameter)
+            k = self.settings.rrf_k
+            fused_results: Dict[UUID, Tuple[float, SearchResult, Dict[str, Any]]] = {}
+            
+            # Process deduplicated semantic results
+            for rank, result in enumerate(unique_semantic):
+                doc_id = result.document_id
+                score = 1.0 / (k + rank + 1)
+                fused_results[doc_id] = (score, result, {"semantic_rank": rank + 1, "keyword_rank": None})
+            
+            # Process deduplicated keyword results
+            for rank, result in enumerate(unique_keyword):
+                doc_id = result.document_id
+                score = 1.0 / (k + rank + 1)
+                if doc_id not in fused_results:
+                    fused_results[doc_id] = (score, result, {"semantic_rank": None, "keyword_rank": rank + 1})
+                else:
+                    curr_score, res_obj, meta = fused_results[doc_id]
+                    meta["keyword_rank"] = rank + 1
+                    fused_results[doc_id] = (curr_score + score, res_obj, meta)
+            
+            # Sort by RRF score
+            sorted_by_rrf = sorted(fused_results.values(), key=lambda x: x[0], reverse=True)
+            
+            # 3. Take top results with normalized scores and traceability metadata
+            final_docs = []
+            if sorted_by_rrf:
+                # Normalize scores to 0-1 range (top result = 1.0)
+                max_score = sorted_by_rrf[0][0]
+                min_score = sorted_by_rrf[-1][0] if len(sorted_by_rrf) > 1 else 0
+                score_range = max_score - min_score if max_score != min_score else 1.0
+                
+                for score, doc, meta in sorted_by_rrf[:limit]:
+                    # Normalize score: 0-1 range
+                    normalized_score = (score - min_score) / score_range if score_range > 0 else 1.0
+                    
+                    # Inject traceability metadata
+                    doc.metadata = doc.metadata or {}
+                    doc.metadata.update({
+                        "rrf_score_raw": round(score, 6),  # 保留原始RRF分数用于调试
+                        "semantic_rank": meta["semantic_rank"],
+                        "keyword_rank": meta["keyword_rank"]
+                    })
+                    doc.relevance_score = round(normalized_score, 4)
+                    final_docs.append(doc)
 
             # Create search metadata
             search_time_ms = int((time.time() - start_time) * 1000)
             search_metadata = SearchMetadata(
                 query=query,
-                total_results=len(search_results),
-                returned_results=len(search_results),
+                total_results=len(fused_results),
+                returned_results=len(final_docs),
                 search_time_ms=search_time_ms,
                 filters_applied=filters,
-                search_type="hybrid"
+                search_type="hybrid_rrf"
             )
 
             return SearchResponse(
-                results=search_results,
+                results=final_docs,
                 search_metadata=search_metadata
             )
             
@@ -346,17 +403,22 @@ class SearchService:
         Returns:
             Document information dictionary or None if not found
         """
+        from ..models import File  # Import locally to avoid circular imports if any
+        
         async with get_db_session() as db:
-            query = select(FileDocument).where(
+            query = select(FileDocument, File).outerjoin(
+                File, FileDocument.file_id == File.id
+            ).where(
                 and_(
                     FileDocument.id == document_id,
                     FileDocument.project_id == project_id
                 )
             )
             result = await db.execute(query)
-            document = result.scalar_one_or_none()
+            row = result.first()
             
-            if document:
+            if row:
+                document, file = row
                 return {
                     "file_id": document.file_id,
                     "collection_id": document.collection_id,
@@ -367,9 +429,33 @@ class SearchService:
                     "section_title": document.section_title,
                     "tags": document.tags,
                     "created_at": document.created_at,
+                    "metadata": {
+                        "source": file.original_filename if file else "Unknown",
+                        "filename": file.original_filename if file else None,
+                        "file_size": file.file_size if file else None,
+                    }
                 }
             
             return None
+
+    def _create_content_preview(self, content: Optional[str], length: int = 200) -> str:
+        """
+        Create a preview of the content for display.
+
+        Args:
+            content: Full content string
+            length: Maximum length of preview
+
+        Returns:
+            Truncated content string
+        """
+        if not content:
+            return ""
+        
+        if len(content) <= length:
+            return content
+            
+        return content[:length] + "..."
 
 
 # Global search service instance

@@ -874,15 +874,43 @@ async def search_collection_documents(
     # Perform semantic search using the search service
     search_service = get_search_service()
 
-    # Use hybrid search by default for better results with project filtering
-    search_response = await search_service.hybrid_search(
-        query=search_request.query,
-        project_id=project_id,
-        collection_id=collection_id,
-        limit=search_request.limit,
-        min_score=search_request.min_score,
-        filters=search_request.filters
-    )
+    # Log incoming request for debugging
+    has_mode = hasattr(search_request, "search_mode")
+    logger.info(f"Search Request - Collection: {collection_id}, Has Mode: {has_mode}, Raw Mode: {getattr(search_request, 'search_mode', 'N/A')}")
+
+    # Perform search based on requested mode
+
+    # Perform search based on requested mode
+    mode = search_request.search_mode.lower() if hasattr(search_request, "search_mode") else "hybrid"
+    
+    if mode == "embedding":
+        search_response = await search_service.semantic_search(
+            query=search_request.query,
+            project_id=project_id,
+            collection_id=collection_id,
+            limit=search_request.limit,
+            min_score=search_request.min_score,
+            filters=search_request.filters
+        )
+    elif mode == "fulltext":
+        search_response = await search_service.keyword_search(
+            query=search_request.query,
+            project_id=project_id,
+            collection_id=collection_id,
+            limit=search_request.limit,
+            min_score=search_request.min_score,
+            filters=search_request.filters
+        )
+    else:
+        # Default to hybrid search
+        search_response = await search_service.hybrid_search(
+            query=search_request.query,
+            project_id=project_id,
+            collection_id=collection_id,
+            limit=search_request.limit,
+            min_score=search_request.min_score,
+            filters=search_request.filters
+        )
 
     return search_response
 

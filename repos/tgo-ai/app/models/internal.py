@@ -42,10 +42,13 @@ class AgentTool(BaseModel):
 class AgentCollection(BaseModel):
     """Model representing an agent's collection access."""
 
-    id: UUID = Field(..., description="Collection ID")
+    id: UUID = Field(..., description="Internal association ID")
+    collection_id: str = Field(..., description="External collection UUID")
+    enabled: bool = Field(default=True, description="Whether collection is enabled for this agent")
     display_name: str = Field(..., description="Human-readable collection name")
     description: Optional[str] = Field(None, description="Collection description")
     collection_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Collection metadata")
+
 
     class Config:
         """Pydantic model configuration."""

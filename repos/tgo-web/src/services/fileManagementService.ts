@@ -116,6 +116,7 @@ export class FileManagementService {
       description?: string;
       tags?: string[];
       language?: string;
+      is_qa_mode?: boolean;
     }
   ): Promise<void> {
     // Check authentication before starting upload
@@ -201,13 +202,13 @@ export class FileManagementService {
     }
   ): Promise<{ successCount: number; failedCount: number; errors: Error[] }> {
     const uploadPromises = files.map(file => this.uploadFile(file, metadata));
-    
+
     const results = await Promise.allSettled(uploadPromises);
-    
+
     const errors: Error[] = [];
     let successCount = 0;
     let failedCount = 0;
-    
+
     results.forEach((result) => {
       if (result.status === 'fulfilled') {
         successCount++;
@@ -216,12 +217,12 @@ export class FileManagementService {
         errors.push(result.reason instanceof Error ? result.reason : new Error(String(result.reason)));
       }
     });
-    
+
     // If all files failed, throw the first error
     if (failedCount > 0 && successCount === 0) {
       throw errors[0];
     }
-    
+
     return { successCount, failedCount, errors };
   }
 
@@ -267,13 +268,13 @@ export class FileManagementService {
 
     try {
       const response = await KnowledgeBaseApiService.downloadFile(fileId);
-      
+
       // Create download link
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
+
       // Get filename from response headers or use file ID
       const contentDisposition = response.headers.get('content-disposition');
       let filename = `file_${fileId}`;
@@ -283,7 +284,7 @@ export class FileManagementService {
           filename = filenameMatch[1];
         }
       }
-      
+
       link.download = filename;
       document.body.appendChild(link);
       link.click();
@@ -305,7 +306,7 @@ export class FileManagementService {
 
       // For now, just log the preview action
       console.log('Previewing file:', file.name);
-      
+
       // In a real implementation, this might:
       // - Open a modal with file content
       // - Navigate to a preview page
@@ -324,11 +325,11 @@ export class FileManagementService {
     statusCounts: Record<string, number>;
   } {
     const { files } = this.state;
-    
+
     const totalFiles = files.length;
     const totalSize = files.reduce((sum, file) => sum + file.sizeBytes, 0);
     const statusCounts: Record<string, number> = {};
-    
+
     files.forEach(file => {
       statusCounts[file.statusType] = (statusCounts[file.statusType] || 0) + 1;
     });

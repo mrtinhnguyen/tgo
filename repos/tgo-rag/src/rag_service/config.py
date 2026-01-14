@@ -121,9 +121,16 @@ class Settings(BaseSettings):
     # Search settings
     default_search_limit: int = Field(default=20, description="Default search result limit")
     max_search_limit: int = Field(default=100, description="Maximum search result limit")
-    min_similarity_score: float = Field(default=0.0, description="Minimum similarity score")
+    min_similarity_score: float = Field(default=0.1, description="Minimum similarity score (filter low-quality results)")
     semantic_search_weight: float = Field(default=0.7, description="Semantic search weight in hybrid search")
     keyword_search_weight: float = Field(default=0.3, description="Keyword search weight in hybrid search")
+    
+    # Hybrid search settings
+    rrf_k: int = Field(default=60, description="RRF fusion constant k")
+    candidate_multiplier: int = Field(default=5, description="Candidate pool multiplier for hybrid search")
+    
+    # QA generation settings
+    qa_generation_batch_size: int = Field(default=5, description="Batch size for QA pair generation")
 
     # Rate limiting settings
     rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting")

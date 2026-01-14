@@ -442,6 +442,31 @@ class RAGServiceClient:
         )
         return await self._handle_response(response)
 
+    async def list_file_documents(
+        self,
+        project_id: str,
+        file_id: str,
+        content_type: Optional[str] = None,
+        chunk_index: Optional[int] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """List chunks/documents for a specific file."""
+        params: Dict[str, Any] = {
+            "project_id": project_id,
+            "limit": limit,
+            "offset": offset,
+        }
+        if content_type:
+            params["content_type"] = content_type
+        if chunk_index is not None:
+            params["chunk_index"] = chunk_index
+
+        response = await self._make_request(
+            "GET", f"/v1/files/{file_id}/documents", params=params
+        )
+        return await self._handle_response(response)
+
     # Website Pages endpoints (New API)
     async def list_website_pages(
         self,

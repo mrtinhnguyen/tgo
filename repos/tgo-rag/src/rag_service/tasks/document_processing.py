@@ -37,7 +37,7 @@ logger = get_logger(__name__)
 
 
 @celery_app.task(bind=True, name="process_file_task")
-def process_file_task(self, file_id: str, collection_id: str) -> Dict[str, Any]:
+def process_file_task(self, file_id: str, collection_id: str, is_qa_mode: bool = True) -> Dict[str, Any]:
     """
     Celery task for processing uploaded files.
 
@@ -76,7 +76,7 @@ def process_file_task(self, file_id: str, collection_id: str) -> Dict[str, Any]:
 
         try:
             result = loop.run_until_complete(
-                process_file_async(file_uuid, collection_uuid, self.request.id)
+                process_file_async(file_uuid, collection_uuid, self.request.id, is_qa_mode)
             )
             # Convert ProcessingResult to dictionary for JSON serialization
             return {

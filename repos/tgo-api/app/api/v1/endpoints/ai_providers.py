@@ -31,16 +31,10 @@ def _filter_models_by_type(models: Optional[list[str]], model_type: Optional[str
     ms = list(models or [])
     if not model_type:
         return ms
-    
-    def is_embedding(m: str) -> bool:
-        # 兼容商店模型：如果是 st- 开头，目前我们无法仅通过 ID 判断
-        # 但如果是普通模型，通常 ID 包含 embedding
-        return "embedding" in m.lower()
-
     if model_type == "embedding":
-        return [m for m in ms if isinstance(m, str) and is_embedding(m)]
+        return [m for m in ms if isinstance(m, str) and "embedding" in m.lower()]
     if model_type == "chat":
-        return [m for m in ms if isinstance(m, str) and not is_embedding(m)]
+        return [m for m in ms if isinstance(m, str) and "embedding" not in m.lower()]
     return ms
 
 
@@ -48,28 +42,17 @@ def _filter_models_by_type(models: Optional[list[str]], model_type: Optional[str
 def _to_response(item: AIProvider, model_type: Optional[str] = None) -> AIProviderResponse:
     plain = decrypt_str(item.api_key) if item.api_key else None
     masked = mask_secret(plain)
-    
-    # Derive available_models from related AIModel rows
-    # IMPORTANT: Explicitly convert everything to basic types to avoid Pydantic trying to serialize ORM objects
-    model_ids = []
-    if item.models:
-        for m in item.models:
-            if m.deleted_at is None:
-                model_ids.append(str(m.model_id))
-    
-    models = _filter_models_by_type(model_ids, model_type)
-    
-    # Build a clean data dict with ONLY basic Python types
-    data = {
+    models = _filter_models_by_type(item.available_models or [], model_type)
+    return AIProviderResponse.model_validate({
         "id": item.id,
         "project_id": item.project_id,
-        "provider": str(item.provider),
-        "name": str(item.name),
-        "api_base_url": str(item.api_base_url) if item.api_base_url else None,
-        "available_models": [str(m) for m in models],
-        "default_model": str(item.default_model) if item.default_model else None,
-        "config": dict(item.config) if item.config else None,
-        "is_active": bool(item.is_active),
+        "provider": item.provider,
+        "name": item.name,
+        "api_base_url": item.api_base_url,
+        "available_models": models,
+        "default_model": item.default_model,
+        "config": item.config,
+        "is_active": item.is_active,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
         "deleted_at": item.deleted_at,
@@ -78,10 +61,7 @@ def _to_response(item: AIProvider, model_type: Optional[str] = None) -> AIProvid
         "last_synced_at": item.last_synced_at,
         "sync_status": item.sync_status,
         "sync_error": item.sync_error,
-    }
-    
-    # Validate using the clean dict
-    return AIProviderResponse.model_validate(data)
+    })
 
 
 
@@ -172,32 +152,42 @@ async def list_ai_providers(
             )
         )
 
-    # Optional filter by inferred model_type from related AIModel rows
+    # Determine model type filter logic
+    filter_func = None
     if model_type:
-        from app.models import AIModel
-        if model_type == "embedding":
-            query = query.filter(
-                or_(
-                    ~AIProvider.models.any(),
-                    AIProvider.models.any(and_(AIModel.model_type == "embedding", AIModel.deleted_at.is_(None)))
-                )
-            )
-        elif model_type == "chat":
-            query = query.filter(
-                or_(
-                    ~AIProvider.models.any(),
-                    AIProvider.models.any(and_(AIModel.model_type == "chat", AIModel.deleted_at.is_(None)))
-                )
-            )
+        def check_model_type(provider: AIProvider) -> bool:
+            models = provider.available_models
+            if not isinstance(models, list) or not models:
+                # Keep empty/undefined providers in list
+                return True
+            
+            has_embedding = any("embedding" in str(m).lower() for m in models)
+            
+            if model_type == "embedding":
+                return has_embedding
+            elif model_type == "chat":
+                # Chat providers are those that have at least one non-embedding model
+                # or have no embedding models found (defaulting to chat)
+                has_chat = any("embedding" not in str(m).lower() for m in models)
+                return has_chat or (not has_embedding)
+            return True
+        filter_func = check_model_type
 
+    # Fetch all candidates first (filtered by basic params)
+    # Since specific model filtering is complex in SQL with mixed types, we do it in Python
+    # This is safe because the number of providers per project is typically small (< 50)
+    candidates = query.order_by(AIProvider.created_at.desc()).all()
 
-    total = query.count()
-    items = (
-        query.order_by(AIProvider.created_at.desc())
-        .offset(params.offset)
-        .limit(params.limit)
-        .all()
-    )
+    # Apply python-side filtering
+    if filter_func:
+        candidates = [c for c in candidates if filter_func(c)]
+
+    total = len(candidates)
+    
+    # Apply pagination in memory
+    start = params.offset
+    end = params.offset + params.limit
+    items = candidates[start:end]
 
     data = [_to_response(x, model_type) for x in items]
     return AIProviderListResponse(
@@ -236,25 +226,11 @@ async def create_ai_provider(
         name=payload.name,
         api_key=encrypt_str(payload.api_key),
         api_base_url=payload.api_base_url,
+        available_models=list(payload.available_models or []),
         default_model=payload.default_model,
         config=payload.config,
         is_active=payload.is_active,
     )
-
-    # Sync available_models to AIModel records
-    from app.models import AIModel
-    if payload.available_models:
-        for mid in payload.available_models:
-            model_type = "embedding" if "embedding" in mid.lower() else "chat"
-            m = AIModel(
-                provider_id=item.id,
-                provider=payload.provider,
-                model_id=mid,
-                model_name=mid,
-                model_type=model_type,
-                is_active=True
-            )
-            item.models.append(m)
 
     db.add(item)
     db.commit()
@@ -332,36 +308,10 @@ async def update_ai_provider(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Provider name already exists")
 
     # Validate default_model within available_models if both provided
-    current_model_ids = [m.model_id for m in item.models if m.deleted_at is None]
-    new_available = data.get("available_models", current_model_ids)
+    new_available = data.get("available_models", item.available_models)
     new_default = data.get("default_model", item.default_model)
     if new_default and new_available and new_default not in new_available:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="default_model must be in available_models")
-
-    # Sync available_models to AIModel records
-    if "available_models" in data:
-        new_mids = data.pop("available_models") or []
-        from app.models import AIModel
-        current_models = {m.model_id: m for m in item.models if m.deleted_at is None}
-        
-        # Add new models
-        for mid in new_mids:
-            if mid not in current_models:
-                model_type = "embedding" if "embedding" in mid.lower() else "chat"
-                m = AIModel(
-                    provider_id=item.id,
-                    provider=item.provider,
-                    model_id=mid,
-                    model_name=mid,
-                    model_type=model_type,
-                    is_active=True
-                )
-                db.add(m)
-        
-        # Remove old models
-        for mid, m in current_models.items():
-            if mid not in new_mids:
-                db.delete(m)
 
     # Handle secret update with encryption (ignore empty to keep existing)
     if "api_key" in data:

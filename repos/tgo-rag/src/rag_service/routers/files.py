@@ -131,6 +131,7 @@ async def upload_file(
     language: Optional[str] = Form(None, description="Document language (ISO 639-1 code)"),
     tags: Optional[str] = Form(None, description="Comma-separated list of tags"),
     project_id: UUID = Form(..., description="Project ID", example="11111111-1111-1111-1111-111111111111"),
+    is_qa_mode: bool = Form(True, description="Enable QA pair generation mode"),
     db: AsyncSession = Depends(get_db_session_dependency),
 ):
     """
@@ -223,7 +224,7 @@ async def upload_file(
     from ..tasks.document_processing import process_file_task
 
     try:
-        task = process_file_task.delay(str(file_record.id), str(collection_id))
+        task = process_file_task.delay(str(file_record.id), str(collection_id), is_qa_mode)
         logger.info(f"Queued file {file_record.id} for processing with task {task.id}")
     except Exception as e:
         logger.warning(f"Failed to queue file for processing: {str(e)}")
@@ -437,6 +438,7 @@ async def upload_files_batch(
     description: Optional[str] = Form(None, description="Optional description for all files"),
     tags: Optional[str] = Form(None, description="Comma-separated list of tags to apply to all files"),
     project_id: UUID = Form(..., description="Project ID", example="11111111-1111-1111-1111-111111111111"),
+    is_qa_mode: bool = Form(True, description="Enable QA pair generation mode"),
     db: AsyncSession = Depends(get_db_session_dependency),
 ):
     """
@@ -596,7 +598,8 @@ async def upload_files_batch(
                 # Import here to avoid circular imports
                 from ..tasks.document_processing import process_file_task
                 # Get collection_id from the first successful upload (all uploads use the same collection)
-                process_file_task.delay(str(upload.id), str(collection_id))
+                # Get collection_id from the first successful upload (all uploads use the same collection)
+                process_file_task.delay(str(upload.id), str(collection_id), is_qa_mode)
 
         except Exception as e:
             await db.rollback()

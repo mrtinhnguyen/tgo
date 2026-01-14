@@ -13,6 +13,10 @@ import { useTranslation } from 'react-i18next';
 import ProjectConfigApiService from '@/services/projectConfigApi';
 import { useAuthStore } from '@/stores/authStore';
 
+import { SearchTest } from '@/components/knowledge/SearchTest';
+import { QADataView } from '@/components/knowledge/QADataView';
+import { TestTube, FileText } from 'lucide-react';
+
 /**
  * Knowledge Base Detail Page Component
  * Based on the HTML reference design
@@ -35,6 +39,12 @@ const KnowledgeBaseDetail: React.FC = () => {
   const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
   const [deletingFiles, setDeletingFiles] = useState<Set<string>>(new Set());
 
+  // Tabs State
+  const [activeTab, setActiveTab] = useState<'documents' | 'search' | 'settings'>('documents');
+
+  // QA View State
+  const [qaFile, setQaFile] = useState<{ id: string; name: string } | null>(null);
+
   // Embedding model check state
   const [hasEmbeddingModel, setHasEmbeddingModel] = useState<boolean>(true);
   const [isCheckingEmbedding, setIsCheckingEmbedding] = useState<boolean>(true);
@@ -44,8 +54,6 @@ const KnowledgeBaseDetail: React.FC = () => {
 
   // Get project ID from auth store
   const projectId = useAuthStore(state => state.user?.project_id);
-
-
 
   // Check if embedding model is configured
   useEffect(() => {
@@ -109,17 +117,6 @@ const KnowledgeBaseDetail: React.FC = () => {
           setDocuments(state.files);
           setIsLoading(state.isLoading);
           setUploadProgress(state.uploadProgress);
-
-          // Debug logging for upload progress
-          if (state.uploadProgress.size > 0) {
-            console.log('KnowledgeBaseDetail: Upload progress updated:',
-              Array.from(state.uploadProgress.values()).map(p => ({
-                fileName: p.fileName,
-                progress: p.progress,
-                status: p.status
-              }))
-            );
-          }
         });
 
         // Load files
@@ -177,13 +174,26 @@ const KnowledgeBaseDetail: React.FC = () => {
 
   // Handle file upload
   const handleFileUpload = async (files: File[]) => {
-    if (!fileServiceRef.current) {
-      console.error('File service not initialized');
+    if (!id || !fileServiceRef.current) {
+      console.error('File service not initialized or collection ID missing');
       showApiError(showToast, new Error(t('knowledge.detail.fileServiceNotInitialized', '文件服务未初始化')));
       return;
     }
 
+    // Check if files exceed limit
+    const totalSize = files.reduce((acc, file) => acc + file.size, 0);
+    // 50MB limit for batch upload
+    if (totalSize > 50 * 1024 * 1024) {
+      showToast(
+        'error',
+        t('knowledge.upload.error'),
+        t('knowledge.upload.totalSizeLimit')
+      );
+      return;
+    }
+
     try {
+      // Use ref to call uploadFiles
       const result = await fileServiceRef.current.uploadFiles(files, {
         description: 'Uploaded via web interface',
         tags: ['web-upload'],
@@ -192,19 +202,19 @@ const KnowledgeBaseDetail: React.FC = () => {
       // Show appropriate message based on results
       if (result.failedCount === 0) {
         // All files uploaded successfully
-      if (files.length === 1) {
-        showFileSuccess(showToast, 'upload', files[0].name);
-      } else {
-        showToast('success', t('knowledge.upload.uploadComplete', '上传完成'), t('knowledge.upload.multipleSuccessMessage', { count: files.length, defaultValue: `${files.length} 个文件上传成功` }));
-      }
+        if (files.length === 1) {
+          showFileSuccess(showToast, 'upload', files[0].name);
+        } else {
+          showToast('success', t('knowledge.upload.uploadComplete', '上传完成'), t('knowledge.upload.multipleSuccessMessage', { count: files.length, defaultValue: `${files.length} 个文件上传成功` }));
+        }
       } else if (result.successCount > 0) {
         // Partial success
-        showToast('warning', 
-          t('knowledge.upload.partialSuccess', '部分上传成功'), 
-          t('knowledge.upload.partialSuccessMessage', { 
-            success: result.successCount, 
-            failed: result.failedCount, 
-            defaultValue: `${result.successCount} 个文件上传成功，${result.failedCount} 个文件上传失败` 
+        showToast('warning',
+          t('knowledge.upload.partialSuccess', '部分上传成功'),
+          t('knowledge.upload.partialSuccessMessage', {
+            success: result.successCount,
+            failed: result.failedCount,
+            defaultValue: `${result.successCount} 个文件上传成功，${result.failedCount} 个文件上传失败`
           })
         );
       }
@@ -298,6 +308,14 @@ const KnowledgeBaseDetail: React.FC = () => {
     }
   };
 
+  const handleViewQA = (docId: string, docName: string) => {
+    setQaFile({ id: docId, name: docName });
+  };
+
+  const handleCloseQA = () => {
+    setQaFile(null);
+  };
+
   // Calculate stats
   const totalSize = React.useMemo(() => {
     const totalBytes = documents.reduce((sum, doc) => sum + doc.sizeBytes, 0);
@@ -310,8 +328,6 @@ const KnowledgeBaseDetail: React.FC = () => {
     const latest = new Date(Math.max(...dates.map(d => d.getTime())));
     return latest.toLocaleDateString(i18n.language || undefined);
   }, [documents]);
-
-
 
   // Show loading state
   if (isLoading) {
@@ -406,32 +422,85 @@ const KnowledgeBaseDetail: React.FC = () => {
           totalSize={totalSize}
           lastUpdated={lastUpdated}
         />
+
+        {/* Tabs - Only show if not in legacy QA view */}
+        {!qaFile && (
+          <div className="px-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => setActiveTab('documents')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'documents'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+              >
+                <FileText className="w-4 h-4" />
+                {t('knowledge.tabs.documents', '文档列表')}
+              </button>
+              <button
+                onClick={() => setActiveTab('search')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'search'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+              >
+                <TestTube className="w-4 h-4" />
+                {t('knowledge.tabs.searchTest', '搜索测试')}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex-grow overflow-y-auto" style={{ height: 0 }}>
           <div className='h-full w-full'>
-            {/* Upload Area */}
-            <FileUpload
-              onUpload={handleFileUpload}
-              isVisible={isUploadVisible}
-              onToggle={handleToggleUpload}
-              uploadProgress={uploadProgress}
-              onRemoveUploadProgress={handleRemoveUploadProgress}
-              hasEmbeddingModel={hasEmbeddingModel}
-              isCheckingEmbedding={isCheckingEmbedding}
-            />
 
-            {/* Document List */}
-            <DocumentList
-              documents={documents}
-              isLoading={isLoading}
-              onDownload={handleDownload}
-              onDelete={handleDelete}
-              searchTerm={searchTerm}
-              fileTypeFilter={fileTypeFilter}
-              downloadingFiles={downloadingFiles}
-              deletingFiles={deletingFiles}
-            />
+            {/* QA Data View Overlay */}
+            {qaFile && (
+              <div className="absolute inset-0 z-20 bg-gray-100 dark:bg-gray-900 p-6">
+                <QADataView
+                  fileId={qaFile.id}
+                  fileName={qaFile.name}
+                  onClose={handleCloseQA}
+                />
+              </div>
+            )}
+
+            {/* Document List View */}
+            {activeTab === 'documents' && !qaFile && (
+              <>
+                {/* Upload Area */}
+                <FileUpload
+                  onUpload={handleFileUpload}
+                  isVisible={isUploadVisible}
+                  onToggle={handleToggleUpload}
+                  uploadProgress={uploadProgress}
+                  onRemoveUploadProgress={handleRemoveUploadProgress}
+                  hasEmbeddingModel={hasEmbeddingModel}
+                  isCheckingEmbedding={isCheckingEmbedding}
+                />
+
+                {/* Document List */}
+                <DocumentList
+                  documents={documents}
+                  isLoading={isLoading}
+                  onDownload={handleDownload}
+                  onDelete={handleDelete}
+                  onViewQA={handleViewQA}
+                  searchTerm={searchTerm}
+                  fileTypeFilter={fileTypeFilter}
+                  downloadingFiles={downloadingFiles}
+                  deletingFiles={deletingFiles}
+                />
+              </>
+            )}
+
+            {/* Search Test View */}
+            {activeTab === 'search' && !qaFile && (
+              <SearchTest collectionId={id!} />
+            )}
+
           </div>
-          <br/><br/><br/><br/>
+          <br /><br /><br /><br />
         </div>
 
       </div>

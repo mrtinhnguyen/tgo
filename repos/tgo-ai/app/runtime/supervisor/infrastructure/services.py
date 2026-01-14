@@ -132,15 +132,17 @@ def _convert_agent(
         collections: List[InternalAgentCollection] = []
         for binding in agent.collections:
             try:
-                collection_id = _safe_uuid(binding.collection_id)
                 collections.append(
                     InternalAgentCollection(
-                        id=collection_id,
+                        id=binding.id,
+                        collection_id=binding.collection_id,
+                        enabled=binding.enabled,
                         display_name=str(binding.collection_id),
                         description=None,
                         collection_metadata={"enabled": binding.enabled},
                     )
                 )
+
             except Exception as e:
                 logger.warning(
                     "Failed to convert agent collection, skipping",

@@ -333,10 +333,12 @@ class AgnoTeamBuilder:
 
             rag_config = RagConfig(
                 rag_url=context.rag_url,
-                collections=[str(binding.id) for binding in internal_agent.collections],
+                collections=[binding.collection_id for binding in internal_agent.collections if binding.enabled],
                 api_key=context.rag_api_key,
                 project_id=str(context.project_id) if context.project_id is not None else None,
+                filters={"content_type": "qa_pair"}
             )
+
 
         workflow_config = None
         workflow_service_url = getattr(settings, "workflow_service_url", None)

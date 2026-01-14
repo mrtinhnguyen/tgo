@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UploadCloud, X, CheckCircle, AlertCircle, Loader, Settings } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { UploadCloud, X, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 
 interface FileUploadProgress {
   fileId: string;
@@ -41,7 +40,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   isCheckingEmbedding = false
 }) => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDragOver, setIsDragOver] = useState(false);
@@ -59,7 +57,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       size: 0, // Size not tracked during upload, will be available after completion
       progress: progress.progress,
       status: progress.status === 'completed' ? 'success' :
-              progress.status === 'error' ? 'error' : 'uploading',
+        progress.status === 'error' ? 'error' : 'uploading',
       error: progress.error,
     } as UploadFile));
 
@@ -185,43 +183,20 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  if (!isVisible) return null;
+  if (!isVisible && (uploadProgress ? uploadProgress.size === 0 : true)) {
+    return null;
+  }
 
   return (
     <div className="mx-6 mt-4 p-6 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/60 dark:border-gray-700/60">
-      {/* Embedding Model Warning */}
-      {!isCheckingEmbedding && !hasEmbeddingModel && (
-        <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-1">
-                {t('knowledge.upload.noEmbeddingModel.title', '⚠️ 无法上传文件')}
-              </h4>
-              <p className="text-sm text-amber-800 dark:text-amber-300 mb-3">
-                {t('knowledge.upload.noEmbeddingModel.description', '系统尚未配置嵌入模型。知识库文件需要嵌入模型进行向量化处理，请先前往 AI 模型提供商设置页面配置默认嵌入模型。')}
-              </p>
-              <button
-                onClick={() => navigate('/settings/providers')}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-600 dark:bg-amber-700 text-white text-sm rounded-md hover:bg-amber-700 dark:hover:bg-amber-800 transition-colors"
-              >
-                <Settings className="w-4 h-4" />
-                {t('knowledge.upload.noEmbeddingModel.goToSettings', '前往配置')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Upload Area */}
       <div
-        className={`upload-area rounded-lg p-8 text-center border-2 border-dashed transition-all duration-300 ${
-          isUploadDisabled
-            ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 cursor-not-allowed opacity-60'
-            : isDragOver
-              ? 'border-blue-500 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-900/30'
-              : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-        }`}
+        className={`upload-area rounded-lg p-8 text-center border-2 border-dashed transition-all duration-300 ${isUploadDisabled
+          ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 cursor-not-allowed opacity-60'
+          : isDragOver
+            ? 'border-blue-500 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-900/30'
+            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+          }`}
         onDragOver={isUploadDisabled ? undefined : handleDragOver}
         onDragLeave={isUploadDisabled ? undefined : handleDragLeave}
         onDrop={isUploadDisabled ? undefined : handleDrop}
@@ -237,10 +212,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           <>
             <UploadCloud className={`w-12 h-12 mx-auto mb-4 ${isUploadDisabled ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}`} />
             <h3 className={`text-lg font-medium mb-2 ${isUploadDisabled ? 'text-gray-500 dark:text-gray-500' : 'text-gray-800 dark:text-gray-100'}`}>
-              {t('knowledge.upload.title')}
+              {t('knowledge.upload.title', '点击或拖拽上传文件')}
             </h3>
             <p className={`text-sm mb-4 ${isUploadDisabled ? 'text-gray-400 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'}`}>
-              {t('knowledge.upload.supportedFormats')}
+              {t('knowledge.upload.supportedFormats', '支持 PDF, Word, Excel, PowerPoint, Text, Markdown 等格式')}
             </p>
 
             <input
@@ -253,17 +228,18 @@ export const FileUpload: React.FC<FileUploadProps> = ({
               disabled={isUploadDisabled}
             />
 
-            <button
-              onClick={() => !isUploadDisabled && fileInputRef.current?.click()}
-              disabled={isUploadDisabled}
-              className={`px-4 py-2 rounded-md transition-colors duration-200 ${
-                isUploadDisabled
+            <div className="flex flex-col items-center gap-4">
+              <button
+                onClick={() => !isUploadDisabled && fileInputRef.current?.click()}
+                disabled={isUploadDisabled}
+                className={`px-4 py-2 rounded-md transition-colors duration-200 ${isUploadDisabled
                   ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                   : 'bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700'
-              }`}
-            >
-              {t('knowledge.upload.selectFiles')}
-            </button>
+                  }`}
+              >
+                {t('knowledge.upload.selectFiles', '选择文件')}
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -286,30 +262,30 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {file.size > 0 ? formatFileSize(file.size) : '上传中...'}
                     </p>
-                    
+
                     {/* Progress bar */}
                     {file.status === 'uploading' && (
                       <div className="mt-2">
                         <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300 mb-1">
-                          <span>{t('knowledge.upload.uploadProgress')}</span>
+                          <span>{t('knowledge.upload.uploadProgress', '上传进度')}</span>
                           <span>{Math.round(file.progress)}%</span>
                         </div>
                         <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5">
-                          <div 
+                          <div
                             className="bg-blue-500 dark:bg-blue-400 h-1.5 rounded-full progress-bar"
                             style={{ width: `${file.progress}%` }}
                           />
                         </div>
                       </div>
                     )}
-                    
+
                     {/* Error message */}
                     {file.status === 'error' && file.error && (
                       <p className="text-xs text-red-500 dark:text-red-400 mt-1">{file.error}</p>
                     )}
                   </div>
                 </div>
-                
+
                 <div className="flex items-center ml-4">
                   {/* Status icon */}
                   {file.status === 'uploading' && (
@@ -321,7 +297,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                   {file.status === 'error' && (
                     <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400 mr-2" />
                   )}
-                  
+
                   {/* Remove button */}
                   <button
                     onClick={() => removeUploadFile(file.id)}

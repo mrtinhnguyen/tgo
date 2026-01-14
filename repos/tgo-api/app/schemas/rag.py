@@ -387,6 +387,11 @@ class CollectionSearchRequest(BaseSchema):
             "tags": {"section": "installation"}
         }]
     )
+    search_mode: str = Field(
+        default="hybrid",
+        description="Search mode: 'hybrid' (default), 'embedding', or 'fulltext'",
+        examples=["hybrid"]
+    )
 
 
 class SearchResult(BaseSchema):
@@ -409,6 +414,7 @@ class SearchResult(BaseSchema):
     page_number: Optional[int] = Field(None, description="Page number in original document")
     section_title: Optional[str] = Field(None, description="Section or chapter title")
     tags: Optional[Dict[str, Any]] = Field(None, description="Document tags and metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Detailed metadata including source and filename")
     created_at: datetime = Field(..., description="Document creation timestamp")
 
 
@@ -517,6 +523,7 @@ class FileUploadResponse(BaseSchema):
 
 
 # Batch Upload Schemas
+
 class FileUploadError(BaseSchema):
     """Schema for individual file upload errors."""
     
@@ -551,6 +558,28 @@ class BatchFileUploadResponse(BaseSchema):
         description="Overall batch status message",
         examples=["Batch upload completed: 4 successful, 1 failed"]
     )
+
+
+# Document Schemas
+class DocumentResponse(BaseSchema):
+    """Schema for document chunk API responses."""
+    
+    id: UUID = Field(..., description="Document chunk unique identifier")
+    file_id: UUID = Field(..., description="Associated file ID")
+    chunk_index: int = Field(..., description="Index of this chunk in the file")
+    content: str = Field(..., description="Text content of the chunk")
+    content_type: str = Field(..., description="Type of content (e.g., paragraph, heading)")
+    token_count: int = Field(..., description="Number of tokens in this chunk")
+    page_number: Optional[int] = Field(None, description="Page number in original document")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class DocumentListResponse(BaseSchema):
+    """Schema for paginated document list responses."""
+    
+    data: List[DocumentResponse] = Field(..., description="List of documents")
+    pagination: PaginationMetadata = Field(..., description="Pagination metadata")
+
 
 
 # Website Crawl Schemas

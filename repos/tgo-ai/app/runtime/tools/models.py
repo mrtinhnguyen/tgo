@@ -22,6 +22,8 @@ class RagConfig(BaseModel):
     rag_url: Optional[str] = Field(default=None, description="RAG服务地址")
     project_id: Optional[str] = Field(default=None, description="Project ID for RAG service calls")
     collections: Optional[List[str]] = Field(default=None, description="启用的集合列表")
+    filters: Optional[Dict[str, Any]] = Field(default=None, description="搜索过滤条件")
+
 
 
 class WorkflowConfig(BaseModel):

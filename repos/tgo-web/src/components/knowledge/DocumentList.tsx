@@ -5,7 +5,8 @@ import {
   Download,
   Trash2,
   FileX,
-  Loader
+  Loader,
+  MessageSquare
 } from 'lucide-react';
 import type { KnowledgeFile } from '@/types';
 
@@ -14,6 +15,7 @@ interface DocumentListProps {
   isLoading: boolean;
   onDownload: (docId: string) => void;
   onDelete: (docId: string) => void;
+  onViewQA: (docId: string, docName: string) => void;
   // Search and filter from parent
   searchTerm: string;
   fileTypeFilter: string;
@@ -34,6 +36,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   isLoading,
   onDownload,
   onDelete,
+  onViewQA,
   searchTerm,
   fileTypeFilter,
   downloadingFiles = new Set(),
@@ -59,7 +62,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   // Get status badge
   const getStatusBadge = (statusType: string, status: string) => {
     const baseClasses = "px-2 py-1 text-xs font-medium rounded-full";
-    
+
     switch (statusType) {
       case 'success':
         return (
@@ -156,22 +159,22 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       {/* Document Table */}
       <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/60 dark:border-gray-700/60 overflow-hidden">
         {/* Table Header */}
-        <div className="grid grid-cols-[minmax(0,_2fr)_1fr_1fr_1fr_auto] gap-4 px-4 py-2 border-b border-gray-200/60 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-900/50">
-          <div 
+        <div className="grid grid-cols-[minmax(250px,2fr)_100px_180px_120px_100px] gap-4 px-4 py-3 border-b border-gray-200/60 dark:border-gray-700/60 bg-gray-50/50 dark:bg-gray-900/50">
+          <div
             className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             onClick={() => handleSort('name')}
           >
             {t('knowledge.detail.documentName')}
             <ArrowUpDown className="w-3 h-3 ml-1" />
           </div>
-          <div 
+          <div
             className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             onClick={() => handleSort('size')}
           >
             {t('knowledge.detail.fileSize')}
             <ArrowUpDown className="w-3 h-3 ml-1" />
           </div>
-          <div 
+          <div
             className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             onClick={() => handleSort('date')}
           >
@@ -202,9 +205,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             filteredAndSortedDocuments.map((doc, index) => (
               <div
                 key={doc.id}
-                className={`grid grid-cols-[minmax(0,_2fr)_1fr_1fr_1fr_auto] gap-4 px-4 py-3 items-center hover:bg-gray-50/30 dark:hover:bg-gray-700/30 transition-colors ${
-                  index < filteredAndSortedDocuments.length - 1 ? 'border-b border-gray-200/60 dark:border-gray-700/60' : ''
-                }`}
+                className={`grid grid-cols-[minmax(250px,2fr)_100px_180px_120px_100px] gap-4 px-4 py-3 items-center hover:bg-gray-50/30 dark:hover:bg-gray-700/30 transition-colors ${index < filteredAndSortedDocuments.length - 1 ? 'border-b border-gray-200/60 dark:border-gray-700/60' : ''
+                  }`}
               >
                 {/* Document Name */}
                 <div className="flex items-center space-x-3 min-w-0">
@@ -214,24 +216,31 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                     <p className="text-xs text-gray-500 dark:text-gray-400">{doc.type.toUpperCase()}</p>
                   </div>
                 </div>
-                
+
                 {/* File Size */}
                 <div className="text-sm text-gray-900 dark:text-gray-100 font-medium">
                   {doc.size}
                 </div>
-                
+
                 {/* Upload Date */}
                 <div className="text-sm text-gray-900 dark:text-gray-100">
                   {doc.uploadDate}
                 </div>
-                
+
                 {/* Status */}
                 <div>
                   {getStatusBadge(doc.statusType, doc.status)}
                 </div>
-                
+
                 {/* Actions */}
                 <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => onViewQA(doc.id, doc.name)}
+                    className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors"
+                    title={t('knowledge.detail.viewQA', '查看问答对')}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
                   <button
                     onClick={() => onDownload(doc.id)}
                     disabled={downloadingFiles.has(doc.id)}

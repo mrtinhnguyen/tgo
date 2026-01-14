@@ -249,6 +249,7 @@ async def search_collection_documents(
             "collection_id": str(collection_id),
             "query": search_request.query,
             "limit": search_request.limit,
+            "search_mode": getattr(search_request, "search_mode", "N/A"),
         }
     )
     project, _api_key = project_and_key

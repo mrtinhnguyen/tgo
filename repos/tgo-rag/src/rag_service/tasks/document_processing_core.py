@@ -136,7 +136,8 @@ async def update_website_page_status_by_file_id(
 async def process_file_async(
     file_uuid: UUID,
     collection_id: UUID,
-    task_id: Optional[str] = None
+    task_id: Optional[str] = None,
+    is_qa_mode: bool = False
 ) -> ProcessingResult:
     """
     Main asynchronous document processing function.
@@ -153,6 +154,7 @@ async def process_file_async(
         file_uuid: UUID of the file to process
         collection_id: UUID of the collection the file belongs to
         task_id: Optional Celery task ID for progress tracking
+        is_qa_mode: Whether to generate QA pairs for the document
         
     Returns:
         Dictionary containing processing results and metrics
@@ -166,7 +168,7 @@ async def process_file_async(
     try:
         # Update status to processing
         await _update_file_status(file_uuid, ProcessingStatus.PROCESSING)
-        log_processing_step(file_id, ProcessingStep.LOADING_FILE, "Starting document processing")
+        log_processing_step(file_id, ProcessingStep.LOADING_FILE, f"Starting document processing (QA Mode: {is_qa_mode})")
         
         # Load file information
         file_info = await _load_file_info(file_uuid, file_id)
@@ -179,6 +181,13 @@ async def process_file_async(
         
         # Chunk documents
         chunks = await _chunk_documents(documents, file_id, file_uuid, collection_id, file_info.project_id)
+        
+        # If QA mode is enabled, generate QA pairs and append to chunks
+        if is_qa_mode:
+            # QA generation proceeds without explicit status update (defaults to previous state)
+            qa_chunks = await _generate_qa_pairs(chunks, file_id, file_uuid, collection_id, file_info.project_id)
+            if qa_chunks:
+                chunks.extend(qa_chunks)
         
         # Store document chunks in database
         await _store_document_chunks(chunks, file_id, file_info.project_id)
@@ -213,25 +222,107 @@ async def process_file_async(
         )
 
     except Exception as e:
-        processing_time = time.time() - start_time
-
-        # Handle the error
-        if isinstance(e, DocumentProcessingError):
-            await _handle_processing_error(file_uuid, file_id, e, e.step)
-        else:
-            await _handle_processing_error(file_uuid, file_id, e, ProcessingStep.LOADING_FILE)
-
-        # Update associated WebsitePage status if this file came from crawling
-        await _update_website_page_status(file_uuid, "failed", str(e))
-
+        logger.error(f"Async processing failed: {e}")
         return ProcessingResult(
             status=ProcessingStatus.FAILED.value,
             file_id=file_id,
             document_count=0,
             total_tokens=0,
-            processing_time=processing_time,
+            processing_time=0,
             error=str(e)
         )
+
+
+async def _generate_qa_pairs(
+    chunks: List[Dict[str, Any]], 
+    file_id: str, 
+    file_uuid: UUID, 
+    collection_id: UUID, 
+    project_id: UUID
+) -> List[Dict[str, Any]]:
+    """Generate QA pairs from document chunks."""
+    from ..services.llm import get_llm_service_for_project
+    from uuid import uuid4
+
+    qa_chunks = []
+    llm_service = await get_llm_service_for_project(project_id)
+    
+    total_chunks = len(chunks)
+    logger.info(f"Starting QA generation for file {file_id} with {total_chunks} chunks")
+    
+    qa_inputs = []
+    import asyncio
+    
+    for i, chunk in enumerate(chunks):
+        qa_inputs.append((i, chunk))
+
+    # Process in batches to avoid overwhelming the LLM API (configurable)
+    from ..config import get_settings
+    settings = get_settings()
+    batch_size = settings.qa_generation_batch_size
+    for k in range(0, len(qa_inputs), batch_size):
+        batch = qa_inputs[k:k+batch_size]
+        tasks = []
+        for _, chunk in batch:
+            tasks.append(llm_service.generate_qa_pairs(chunk["content"]))
+        
+        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for idx, (original_idx, chunk) in enumerate(batch):
+            result = batch_results[idx]
+            
+            if isinstance(result, Exception):
+                logger.error(f"Error generating QA for chunk {chunk['chunk_index']}: {result}")
+                continue
+                
+            qa_pairs = result
+            if not qa_pairs:
+                continue
+                
+            # Convert each QA pair to a document chunk
+            for j, qa in enumerate(qa_pairs):
+                question = qa.get("question", "").strip()
+                answer = qa.get("answer", "").strip()
+                
+                if not question or not answer:
+                    continue
+                    
+                # Format content as Q&A
+                content = f"Question: {question}\nAnswer: {answer}"
+                
+                # Create QA chunk
+                qa_chunk_id = f"{file_id}_qa_{chunk['chunk_index']}_{j}"
+                
+                qa_metadata = chunk["metadata"].copy()
+                qa_metadata.update({
+                    "is_qa": True,
+                    "original_question": question,
+                    "original_answer": answer,
+                    "source_chunk_id": chunk["chunk_id"]
+                })
+                
+                qa_chunk = {
+                    "id": uuid4(),
+                    "file_id": file_uuid,
+                    "collection_id": collection_id,
+                    "project_id": project_id,
+                    "chunk_id": qa_chunk_id,
+                    "content": content,
+                    "character_count": len(content),
+                    # Estimate tokens for QA pair
+                    "token_count": len(content.split()) + 10, 
+                    "chunk_index": chunk["chunk_index"], # Keep same index to appear near original? Or maybe separate.
+                    "document_type": "qa_pair",
+                    "metadata": qa_metadata
+                }
+                qa_chunks.append(qa_chunk)
+                
+            # Log progress every 10 chunks
+            if (original_idx + 1) % 10 == 0:
+                logger.info(f"QA Generation progress: {original_idx + 1}/{total_chunks} chunks processed")
+            
+    logger.info(f"QA Generation completed. Generated {len(qa_chunks)} QA pairs from {total_chunks} chunks.")
+    return qa_chunks
 
 
 async def _load_file_info(file_uuid: UUID, file_id: str) -> Any:

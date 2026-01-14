@@ -14,6 +14,7 @@ from app.schemas.rag import (
     FileListResponse,
     FileResponse,
     FileUploadResponse,
+    DocumentListResponse,
 )
 from app.services.rag_client import rag_client
 
@@ -371,3 +372,57 @@ async def delete_file(
         project_id=project_id,
         file_id=str(file_id),
     )
+
+
+@router.get(
+    "/{file_id}/documents",
+    response_model=DocumentListResponse,
+    responses=LIST_RESPONSES,
+    summary="List File Documents",
+    description="""
+    Retrieve all document chunks generated from a specific file with filtering and pagination.
+    
+    This endpoint provides access to the processed document chunks for RAG operations.
+    File must belong to the authenticated project.
+    """,
+)
+async def list_file_documents(
+    file_id: UUID,
+    content_type: Optional[str] = Query(
+        None, description="Filter by content type"
+    ),
+    chunk_index: Optional[int] = Query(
+        None, description="Filter by chunk index"
+    ),
+    limit: int = Query(
+        20, ge=1, le=100, description="Number of documents to return"
+    ),
+    offset: int = Query(
+        0, ge=0, description="Number of documents to skip"
+    ),
+    project_and_key = Depends(get_authenticated_project),
+) -> DocumentListResponse:
+    """List documents for a file from RAG service."""
+    logger.info(
+        "Listing file documents",
+        extra={
+            "file_id": str(file_id),
+            "content_type": content_type,
+            "chunk_index": chunk_index,
+            "limit": limit,
+            "offset": offset,
+        }
+    )
+    project, _api_key = project_and_key
+    project_id = str(project.id)
+
+    result = await rag_client.list_file_documents(
+        project_id=project_id,
+        file_id=str(file_id),
+        content_type=content_type,
+        chunk_index=chunk_index,
+        limit=limit,
+        offset=offset,
+    )
+
+    return DocumentListResponse.model_validate(result)

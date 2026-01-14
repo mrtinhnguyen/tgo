@@ -337,7 +337,8 @@ class EmbeddingService:
             api_key=api_key,
             model=model,
             dimensions=dimensions,
-            batch_size=batch_size
+            batch_size=batch_size,
+            base_url=self._override_base_url or self.settings.openai_compatible_base_url,
         )
 
     def _create_qwen3_client(self) -> Qwen3EmbeddingClient:
@@ -531,6 +532,7 @@ async def get_embedding_service_for_project(project_id) -> EmbeddingService:
             dimensions=rec.dimensions,
             batch_size=rec.batch_size,
             api_key=rec.api_key,
+            base_url=rec.base_url,
         )
     elif provider == EmbeddingProvider.QWEN3.value:
         if not rec.api_key:

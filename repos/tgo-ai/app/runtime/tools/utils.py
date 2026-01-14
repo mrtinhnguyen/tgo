@@ -14,7 +14,7 @@ from mcp import ClientSession, McpError, Tool
 from mcp.client.streamable_http import streamablehttp_client
 
 
-async def create_rag_tool(rag_url: str, collection_id: str, project_id: Optional[str]) -> Function:
+async def create_rag_tool(rag_url: str, collection_id: str, project_id: Optional[str], filters: Optional[Dict[str, Any]] = None) -> Function:
     """根据集合信息生成RAG查询工具."""
 
     if not project_id:
@@ -43,7 +43,7 @@ async def create_rag_tool(rag_url: str, collection_id: str, project_id: Optional
     tool_name = f"rag_search_{short_id}".lower()
     async def search_collection(query: str) -> str:
         search_endpoint = f"{url}/v1/collections/{collection_id}/documents/search"
-        payload = {"query": query, "limit": 10}
+        payload = {"query": query, "limit": 10, "filters": filters}
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -61,7 +61,7 @@ async def create_rag_tool(rag_url: str, collection_id: str, project_id: Optional
             return "<documents />"
 
         serialized = [
-            f'<document id="{doc.get("document_id", "unknown")}">{doc.get("content_preview", "")}</document>'
+            f'<document id="{doc.get("document_id", "unknown")}">{doc.get("content", doc.get("content_preview", ""))}</document>'
             for doc in documents
         ]
         return "<documents>" + "".join(serialized) + "</documents>"

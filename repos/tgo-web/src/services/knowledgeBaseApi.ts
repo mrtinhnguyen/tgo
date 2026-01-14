@@ -113,8 +113,8 @@ export interface FileResponse {
   updated_at: string;
 }
 
-export interface CollectionListResponse extends PaginatedResponse<CollectionResponse> {}
-export interface FileListResponse extends PaginatedResponse<FileResponse> {}
+export interface CollectionListResponse extends PaginatedResponse<CollectionResponse> { }
+export interface FileListResponse extends PaginatedResponse<FileResponse> { }
 
 export interface CollectionCreateRequest {
   display_name: string;
@@ -178,7 +178,7 @@ export interface WebsitePageResponse {
   updated_at: string;
 }
 
-export interface WebsitePageListResponse extends PaginatedResponse<WebsitePageResponse> {}
+export interface WebsitePageListResponse extends PaginatedResponse<WebsitePageResponse> { }
 
 // Add Page Types (new API)
 export interface AddPageRequest {
@@ -311,7 +311,49 @@ export interface QACategoryListResponse {
   total: number;
 }
 
-// API Endpoints - Use relative paths since the API client already includes the base URL
+// Search Types
+export interface SearchFilter {
+  field: string;
+  operator: 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le' | 'in' | 'nin' | 'contains';
+  value: any;
+}
+
+export interface SearchRequest {
+  query: string;
+  limit?: number;
+  min_score?: number;
+  filters?: Record<string, any>;
+
+  search_mode?: 'embedding' | 'fulltext' | 'hybrid';
+  max_tokens?: number;
+}
+
+export interface SearchResultDoc {
+  id: string;
+  document_id?: string;
+  content_preview: string;
+  content?: string;
+  score: number;
+  relevance_score?: number;
+  content_type?: string;
+  document_title?: string;
+  metadata: Record<string, any>;
+  tags?: Record<string, any>;
+}
+
+export interface SearchResponse {
+  results: SearchResultDoc[];
+  search_metadata: {
+    query: string;
+    total_results: number;
+    returned_results: number;
+    search_time_ms: number;
+    filters_applied?: Record<string, any>;
+    search_type: string;
+  };
+}
+
+// API Endpoints-Use relative paths since the API client already includes the base URL
 const API_VERSION = 'v1';
 
 export const KNOWLEDGE_BASE_ENDPOINTS = {
@@ -322,6 +364,7 @@ export const KNOWLEDGE_BASE_ENDPOINTS = {
   // Files
   FILES: `/${API_VERSION}/rag/files`,
   FILE_BY_ID: (id: string) => `/${API_VERSION}/rag/files/${id}`,
+  FILE_DOCUMENTS: (id: string) => `/${API_VERSION}/rag/files/${id}/documents`,
   FILES_BATCH: `/${API_VERSION}/rag/files/batch`,
 
   // Website Pages (new API)
@@ -337,6 +380,9 @@ export const KNOWLEDGE_BASE_ENDPOINTS = {
   QA_PAIRS_IMPORT: (collectionId: string) => `/${API_VERSION}/rag/${collectionId}/qa-pairs/import`,
   QA_CATEGORIES: `/${API_VERSION}/rag/qa-categories`,
   QA_PAIR_BY_ID: (qaPairId: string) => `/${API_VERSION}/rag/qa-pairs/${qaPairId}`,
+
+  // Search
+  SEARCH_DOCUMENTS: (collectionId: string) => `/${API_VERSION}/rag/collections/${collectionId}/documents/search`,
 
   // Utils
   EXTRACT_WEBSITE_METADATA: `/${API_VERSION}/utils/extract-website-metadata`,
@@ -354,7 +400,7 @@ export class KnowledgeBaseApiService extends BaseApiService {
     FILE_BY_ID: (id: string) => `/${this.apiVersion}/rag/files/${id}`,
     FILES_BATCH: `/${this.apiVersion}/rag/files/batch`,
   } as const;
-  
+
   // Collections API
   static async getCollections(params?: {
     limit?: number;
@@ -483,6 +529,22 @@ export class KnowledgeBaseApiService extends BaseApiService {
     } catch (error) {
       console.log('error222-->', error);
       throw new Error(handleApiError(error));
+    }
+  }
+
+  static async getFileDocuments(fileId: string, params?: { limit?: number; offset?: number; project_id?: string; }): Promise<any> {
+    const service = new KnowledgeBaseApiService();
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.limit) queryParams.append('limit', params.limit.toString());
+      if (params?.offset !== undefined) queryParams.append('offset', params.offset.toString());
+      if (params?.project_id) queryParams.append('project_id', params.project_id);
+
+      const baseUrl = KNOWLEDGE_BASE_ENDPOINTS.FILE_DOCUMENTS(fileId);
+      const url = queryParams.toString() ? `${baseUrl}?${queryParams.toString()}` : baseUrl;
+      return await service.get<any>(url);
+    } catch (error) {
+      throw new Error(service['handleApiError'](error));
     }
   }
 
@@ -641,7 +703,7 @@ export class KnowledgeBaseApiService extends BaseApiService {
   }
 
   /**
-   * Crawl deeper from an existing page - extract links and add them to crawl queue
+   * Crawl deeper from an existing page-extract links and add them to crawl queue
    * POST /v1/rag/websites/pages/{page_id}/crawl-deeper
    */
   static async crawlDeeperFromPage(
@@ -825,6 +887,24 @@ export class KnowledgeBaseApiService extends BaseApiService {
         ? `${KNOWLEDGE_BASE_ENDPOINTS.QA_CATEGORIES}?${queryParams.toString()}`
         : KNOWLEDGE_BASE_ENDPOINTS.QA_CATEGORIES;
       return await service.get<QACategoryListResponse>(url);
+    } catch (error) {
+      throw new Error(service['handleApiError'](error));
+    }
+  }
+
+  /**
+   * Search documents in a collection
+   * POST /v1/rag/collections/{collection_id}/documents/search
+   */
+  static async searchDocuments(
+    collectionId: string,
+    request: SearchRequest,
+    projectId: string
+  ): Promise<SearchResponse> {
+    const service = new KnowledgeBaseApiService();
+    try {
+      const url = `${KNOWLEDGE_BASE_ENDPOINTS.SEARCH_DOCUMENTS(collectionId)}?project_id=${projectId}`;
+      return await service.post<SearchResponse>(url, request);
     } catch (error) {
       throw new Error(service['handleApiError'](error));
     }
