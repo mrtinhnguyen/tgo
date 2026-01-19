@@ -203,6 +203,34 @@ export const storeApi = {
     const response = await apiClient.get<string[]>('/v1/store/installed-models');
     return response;
   },
+
+  // --- 员工模板相关 ---
+
+  getAgentCategories: async (): Promise<any[]> => {
+    const response = await storeClient.get<any[]>('/agents/categories');
+    return response.data;
+  },
+
+  getAgents: async (params?: { category?: string; search?: string; skip?: number; limit?: number }) => {
+    const response = await storeClient.get<{ items: any[]; total: number }>('/agents', { params });
+    return response.data;
+  },
+
+  getAgent: async (id: string) => {
+    const response = await storeClient.get<any>(`/agents/${id}`);
+    return response.data;
+  },
+
+  installAgent: async (id: string) => {
+    // 调用 TGO API 招聘员工到本地项目
+    const response = await apiClient.post<any>('/v1/store/install-agent', { resource_id: id });
+    return response;
+  },
+
+  uninstallAgent: async (id: string) => {
+    const response = await apiClient.delete<any>(`/v1/store/uninstall-agent/${id}`);
+    return response;
+  },
 };
 
 export default storeApi;

@@ -213,8 +213,11 @@ def _convert_agent(
             collections=collections,
             workflows=workflows,
             is_default=agent.is_default,
-            created_at=agent.created_at,
-            updated_at=agent.updated_at,
+            is_remote_store_agent=getattr(agent, "is_remote_store_agent", False),
+            remote_agent_url=getattr(agent, "remote_agent_url", None),
+            store_agent_id=getattr(agent, "store_agent_id", None),
+            created_at=agent.created_at or datetime.now(timezone.utc),
+            updated_at=agent.updated_at or datetime.now(timezone.utc),
             llm_provider_credentials=provider_credentials,
         )
     except DataMappingError:

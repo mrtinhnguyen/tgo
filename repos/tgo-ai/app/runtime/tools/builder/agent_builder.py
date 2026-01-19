@@ -2,9 +2,136 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+import uuid
+import asyncio
 from app.models.internal import Agent as InternalAgent
-from agno.agent import Agent
+from agno.agent import Agent, RemoteAgent
+
+class StoreRemoteAgent(RemoteAgent):
+    """Custom RemoteAgent that allows overriding id and name for Team coordination."""
+    
+    def __init__(self, *args, **kwargs):
+        self._override_id = kwargs.pop("override_id", None)
+        self._override_name = kwargs.pop("override_name", None)
+        self._override_metadata = kwargs.pop("override_metadata", None)
+        self._api_key = kwargs.pop("api_key", None)
+        super().__init__(*args, **kwargs)
+
+    @property
+    def id(self) -> str:
+        return self._override_id or self.agent_id
+
+    @property
+    def name(self) -> Optional[str]:
+        return self._override_name or super().name
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        return self._override_metadata or {}
+
+    def _get_auth_headers(self, auth_token: Optional[str] = None) -> Optional[Dict[str, str]]:
+        # Call super to get existing headers if any
+        headers = super()._get_auth_headers(auth_token) or {}
+        api_key = self._api_key or settings.store_api_key
+        
+        import sys
+        if api_key:
+            headers["X-API-Key"] = api_key
+            # Also set Bearer token if not already set, using the API key
+            if "Authorization" not in headers:
+                headers["Authorization"] = f"Bearer {api_key}"
+            print(f"DEBUG: StoreRemoteAgent using API Key starting with: {api_key[:8]}...", file=sys.stderr)
+        else:
+            print(f"DEBUG: StoreRemoteAgent NO API KEY FOUND! settings.store_api_key={settings.store_api_key}", file=sys.stderr)
+            
+        return headers if headers else None
+
+    @property
+    def _agent_config(self) -> Optional[Any]:
+        """Override to pass headers to the remote call."""
+        import time
+        current_time = time.time()
+
+        # Check if cache is valid
+        if self._cached_agent_config is not None:
+            config, cached_at = self._cached_agent_config
+            if current_time - cached_at < self.config_ttl:
+                return config
+
+        # Fetch fresh config with headers
+        headers = self._get_auth_headers()
+        try:
+            config = self.agentos_client.get_agent(self.agent_id, headers=headers)
+            self._cached_agent_config = (config, current_time)
+            return config
+        except Exception as e:
+            # print(f"DEBUG: StoreRemoteAgent _agent_config failed: {e}", file=sys.stderr)
+            return None
+
+    @property
+    def _config(self) -> Optional[Any]:
+        """Override to pass headers to the remote call."""
+        import time
+        current_time = time.time()
+
+        # Check if cache is valid
+        if self._cached_config is not None:
+            config, cached_at = self._cached_config
+            if current_time - cached_at < self.config_ttl:
+                return config
+
+        # Fetch fresh config with headers
+        headers = self._get_auth_headers()
+        try:
+            config = self.agentos_client.get_config(headers=headers)
+            self._cached_config = (config, current_time)
+            return config
+        except Exception:
+            return None
+
+    async def get_agent_config(self) -> Any:
+        """Override to pass headers."""
+        headers = self._get_auth_headers()
+        return await self.agentos_client.aget_agent(self.agent_id, headers=headers)
+
+    async def refresh_config(self) -> Optional[Any]:
+        """Override to pass headers."""
+        import time
+        headers = self._get_auth_headers()
+        config = await self.agentos_client.aget_agent(self.agent_id, headers=headers)
+        self._cached_agent_config = (config, time.time())
+        return config
+
+    def arun(self, *args, **kwargs):
+        # result can be a coroutine or an async generator
+        result = super().arun(*args, **kwargs)
+        
+        # Map IDs in the result
+        if self._override_id:
+            # If it's a coroutine, we need to wrap it to map IDs after it finishes
+            if asyncio.iscoroutine(result):
+                async def wrapped_coro():
+                    run_output = await result
+                    if hasattr(run_output, "agent_id"):
+                        run_output.agent_id = self._override_id
+                    if hasattr(run_output, "agent_name"):
+                        run_output.agent_name = self.name
+                    return run_output
+                return wrapped_coro()
+            
+            # If it's an async iterator, wrap it
+            if hasattr(result, "__aiter__"):
+                async def mapped_generator():
+                    async for event in result:
+                        if hasattr(event, "agent_id"):
+                            event.agent_id = self._override_id
+                        if hasattr(event, "agent_name"):
+                            event.agent_name = self.name
+                        yield event
+                return mapped_generator()
+        
+        return result
 from agno.models.openai import OpenAIChat
 from agno.models.anthropic import Claude
 from agno.models.google import Gemini
@@ -68,13 +195,43 @@ class AgentBuilder:
         self,
         request: AgentRunRequest,
         internal_agent: Optional["InternalAgent"] = None,
-    ) -> Agent:
+    ) -> Union[Agent, RemoteAgent]:
         """Build an agent configured for the given request.
 
         Args:
             request: The agent run request containing configuration
             internal_agent: Optional internal agent model containing tool bindings
         """
+        # 检查是否为远程商店 Agent
+        if internal_agent and getattr(internal_agent, "is_remote_store_agent", False):
+            # 获取商店 API Key
+            api_key = None
+            if request.project_id:
+                try:
+                    credential = await api_service_client.get_store_credential(request.project_id)
+                    if credential:
+                        api_key = credential.get("api_key")
+                    else:
+                        self._logger.warning(f"No store credential found for project {request.project_id}")
+                except Exception as e:
+                    self._logger.warning(f"Failed to fetch store credential: {e}")
+            else:
+                self._logger.warning("No project_id in agent run request, cannot fetch store credential")
+
+            self._logger.debug(
+                "Creating RemoteAgent",
+                agent_id=internal_agent.store_agent_id,
+                base_url=internal_agent.remote_agent_url
+            )
+            return StoreRemoteAgent(
+                base_url=internal_agent.remote_agent_url,
+                agent_id=internal_agent.store_agent_id,
+                timeout=60.0,
+                override_id=str(internal_agent.id),
+                override_name=internal_agent.name,
+                api_key=api_key,
+            )
+
         config = self._normalize_config(request.config)
         tools = await self._build_tools(
             config,

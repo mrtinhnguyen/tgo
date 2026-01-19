@@ -14,7 +14,8 @@ from app.models.staff import Staff
 from app.schemas.store import (
     StoreCredential as StoreCredentialSchema, 
     StoreInstallRequest,
-    StoreBindRequest
+    StoreBindRequest,
+    StoreAgentDetail
 )
 from app.schemas.tools import ToolCreateRequest, ToolType as CoreToolType, ToolSourceType
 from app.utils.crypto import encrypt_str, decrypt_str
@@ -411,3 +412,101 @@ async def list_installed_models(
     except Exception as e:
         logger.error(f"Failed to list installed models: {str(e)}")
         return []
+
+
+@router.post("/install-agent", response_model=Any)
+async def install_agent_from_store(
+    install_in: StoreInstallRequest,
+    db: Session = Depends(get_db),
+    current_user: Staff = Depends(get_current_active_user),
+) -> Any:
+    """从商店招聘 AI 员工到项目"""
+    project_id = current_user.project_id
+    # 1. 获取项目绑定的商店凭证
+    credential = db.scalar(
+        select(StoreCredential).where(StoreCredential.project_id == project_id)
+    )
+    if not credential:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project not bound to Store. Please bind credentials first."
+        )
+    
+    api_key = decrypt_str(credential.api_key_encrypted)
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decrypt Store API Key"
+        )
+
+    # 2. 调用商店 API 获取 AgentTemplate 详情
+    try:
+        agent_template = await store_client.get_agent(install_in.resource_id, api_key)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch agent template from Store: {str(e)}"
+        )
+
+    # 3. 检查推荐模型
+    # TODO: 自动安装推荐模型（如果尚未安装）
+    # 目前简化处理，直接透传模型名称
+
+    # 4. 调用 ai_client.create_agent() 创建本地 Agent
+    try:
+        # 获取项目默认团队
+        from app.models.project import Project
+        project = db.get(Project, project_id)
+        
+        agent_data = {
+            "name": agent_template.title_zh or agent_template.name,
+            "is_remote_store_agent": True,
+            "remote_agent_url": f"{settings.STORE_SERVICE_URL.rstrip('/')}/api/v1/agentos",
+            "store_agent_id": str(agent_template.id),
+            "project_id": str(project_id),
+            "instruction": agent_template.instruction,
+            "model": agent_template.recommended_model,
+            "config": agent_template.default_config,
+            "team_id": project.default_team_id if project else None,
+        }
+        
+        result = await ai_client.create_agent(
+            project_id=str(project_id),
+            agent_data=agent_data,
+        )
+        
+        # 5. 记录商店安装
+        try:
+            await store_client.install_agent(install_in.resource_id, api_key)
+        except Exception as e:
+            logger.warning(f"Failed to record agent installation in store: {str(e)}")
+            
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create agent in AI service: {str(e)}"
+        )
+
+
+@router.delete("/uninstall-agent/{resource_id}")
+async def uninstall_agent_from_store(
+    resource_id: str,
+    db: Session = Depends(get_db),
+    current_user: Staff = Depends(get_current_active_user),
+) -> Any:
+    """从本地项目卸载商店招聘的员工模板（仅取消记录）"""
+    project_id = current_user.project_id
+    
+    credential = db.scalar(
+        select(StoreCredential).where(StoreCredential.project_id == project_id)
+    )
+    if credential:
+        api_key = decrypt_str(credential.api_key_encrypted)
+        if api_key:
+            try:
+                await store_client.uninstall_agent(resource_id, api_key)
+            except Exception:
+                pass
+
+    return {"success": True}

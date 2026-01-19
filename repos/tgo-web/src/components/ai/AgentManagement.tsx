@@ -4,13 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import AgentCard from './AgentCard';
 import CreateAgentModal from './CreateAgentModal';
 import EditAgentModal from './EditAgentModal';
+import AgentStoreModal from './AgentStoreModal';
 import TeamInfoModal from './TeamInfoModal';
+import ToolToastProvider from './ToolToastProvider';
 // import AiToolDetailModal from '@/components/ui/AiToolDetailModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { AgentsGridSkeleton, AgentsErrorState, AgentsEmptyState } from '@/components/ui/AgentsSkeleton';
 import { useAIStore } from '@/stores';
 import { useToast } from '@/hooks/useToast';
-import { LuPlus, LuChevronLeft, LuChevronRight, LuUsers, LuSearch, LuRefreshCw } from 'react-icons/lu';
+import { LuPlus, LuChevronLeft, LuChevronRight, LuUsers, LuSearch, LuRefreshCw, LuStore } from 'react-icons/lu';
 import { Bot } from 'lucide-react';
 import type { Agent, AgentToolResponse } from '@/types';
 import { aiTeamsApiService, TeamWithDetailsResponse } from '@/services/aiTeamsApi';
@@ -52,6 +54,7 @@ const AgentManagement: React.FC = () => {
   // const [selectedTool, setSelectedTool] = useState<AgentToolResponse | null>(null);
   // const [showToolDetail, setShowToolDetail] = useState(false);
   const [showEditAgent, setShowEditAgent] = useState(false);
+  const [showAgentStore, setShowAgentStore] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showTeamInfo, setShowTeamInfo] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
@@ -324,6 +327,13 @@ const AgentManagement: React.FC = () => {
               <LuRefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-sm font-bold rounded-xl transition-all active:scale-95 border border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800/50 dark:text-indigo-400"
+              onClick={() => setShowAgentStore(true)}
+            >
+              <LuStore className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('agents.actions.store', '招聘员工')}</span>
+            </button>
+            <button
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-200 dark:shadow-none transition-all active:scale-95"
               onClick={handleCreateAgent}
             >
@@ -450,6 +460,14 @@ const AgentManagement: React.FC = () => {
       <TeamInfoModal isOpen={showTeamInfo} onClose={() => setShowTeamInfo(false)} team={defaultTeam} onTeamUpdated={handleTeamUpdated} />
       <EditAgentModal agentId={selectedAgent?.id || null} isOpen={showEditAgent} onClose={() => setShowEditAgent(false)} />
       
+      <ToolToastProvider>
+        <AgentStoreModal 
+          isOpen={showAgentStore} 
+          onClose={() => setShowAgentStore(false)}
+          onInstalled={() => handleRefresh()}
+        />
+      </ToolToastProvider>
+
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         title={t('agents.modal.delete.title', '删除AI员工')}

@@ -51,3 +51,20 @@ class StoreModelDetail(BaseSchema):
     provider: StoreModelProvider
     config: Optional[dict] = Field(default_factory=dict)
     is_installed: Optional[bool] = False
+
+class StoreAgentDetail(BaseSchema):
+    id: str
+    name: str
+    title_zh: str
+    title_en: Optional[str] = None
+    description_zh: Optional[str] = None
+    description_en: Optional[str] = None
+    avatar_url: Optional[str] = None
+    instruction: str
+    recommended_model: str
+    default_config: Optional[dict] = Field(default_factory=dict)
+    recommended_tools: Optional[list] = Field(default_factory=list)
+    price: float
+    status: str
+    tags: Optional[list] = Field(default_factory=list)
+    is_installed: Optional[bool] = False

@@ -980,7 +980,8 @@
       "teamChat": "团队对话",
       "teamChatTooltip": "与AI员工团队对话",
       "teamChatNoAgents": "请先创建AI员工",
-      "teamInfo": "团队信息"
+      "teamInfo": "团队信息",
+      "store": "招聘员工"
     },
     "form": {
       "name": "AI员工名称",
@@ -1098,6 +1099,15 @@
         "message": "确定要删除AI员工 \"{{name}}\" 吗？此操作不可撤销。",
         "confirm": "删除",
         "cancel": "取消"
+      },
+      "store": {
+        "title": "员工商店",
+        "searchPlaceholder": "搜索员工名称或职责...",
+        "noResults": "未找到匹配的员工",
+        "hire": "招聘",
+        "alreadyInstalled": "该员工已在团队中",
+        "installSuccess": "成功招聘到一名新员工",
+        "installFailed": "招聘失败，请重试"
       }
     },
     "create": {

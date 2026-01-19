@@ -80,6 +80,9 @@ class Agent(BaseModel):
     collections: List[AgentCollection] = Field(default_factory=list, description="Agent collections")
     workflows: List[AgentWorkflow] = Field(default_factory=list, description="Agent workflows")
     is_default: bool = Field(default=False, description="Whether this is the default agent")
+    is_remote_store_agent: bool = Field(default=False, description="Whether this is a remote agent from store")
+    remote_agent_url: Optional[str] = Field(None, description="URL of the remote AgentOS server")
+    store_agent_id: Optional[str] = Field(None, description="Agent ID in the remote store")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 

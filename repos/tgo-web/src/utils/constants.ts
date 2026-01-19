@@ -60,12 +60,6 @@ export const AI_MENU_ITEMS: NavigationItem[] = [
     title: 'navigation.workflows',
     icon: 'GitBranch',
     path: '/ai/workflows'
-  },
-  {
-    id: 'store',
-    title: 'navigation.store',
-    icon: 'Brain',
-    path: '/ai/store'
   }
 ];
 

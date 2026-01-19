@@ -74,6 +74,18 @@ class AgentBase(BaseSchema):
         description="Agent configuration (temperature, max_tokens, etc.)",
         examples=[{"temperature": 0.7, "max_tokens": 2000}],
     )
+    is_remote_store_agent: bool = Field(
+        default=False,
+        description="Whether this is a remote agent from store",
+    )
+    remote_agent_url: Optional[str] = Field(
+        default=None,
+        description="URL of the remote AgentOS server",
+    )
+    store_agent_id: Optional[str] = Field(
+        default=None,
+        description="Agent ID in the remote store",
+    )
 
 
 
@@ -148,6 +160,18 @@ class AgentUpdate(BaseSchema):
     config: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Updated agent configuration",
+    )
+    is_remote_store_agent: Optional[bool] = Field(
+        default=None,
+        description="Update remote status",
+    )
+    remote_agent_url: Optional[str] = Field(
+        default=None,
+        description="Update remote URL",
+    )
+    store_agent_id: Optional[str] = Field(
+        default=None,
+        description="Update remote agent ID",
     )
     tools: Optional[List[AgentToolCreate]] = Field(
         default=None,

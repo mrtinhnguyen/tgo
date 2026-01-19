@@ -655,6 +655,34 @@ export interface ToolStoreCategory {
   label?: string; // For backward compatibility with older UI code
 }
 
+// Agent Store Types
+export interface AgentStoreCategory {
+  id: string;
+  slug: string;
+  name_zh: string;
+  name_en: string | null;
+  icon: string;
+}
+
+export interface AgentStoreItem {
+  id: string;
+  name: string;
+  title_zh: string;
+  title_en: string | null;
+  description_zh: string | null;
+  description_en: string | null;
+  avatar_url: string | null;
+  instruction: string;
+  recommended_model: string;
+  default_config: Record<string, any>;
+  recommended_tools: string[];
+  price: number;
+  status: string;
+  tags: string[];
+  is_installed?: boolean;
+  categories: AgentStoreCategory[];
+}
+
 // Tool Method Types
 export interface ToolMethod {
   id: string;

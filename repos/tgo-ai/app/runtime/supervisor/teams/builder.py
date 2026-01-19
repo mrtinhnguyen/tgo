@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 import uuid
+import asyncio
 
 from agno.team import Team
-from agno.agent import Agent
+from agno.agent import Agent, RemoteAgent
+from app.runtime.tools.builder.agent_builder import AgentBuilder, StoreRemoteAgent
+from app.services.api_service import api_service_client
 
 from app.config import settings
 from app.models.internal import Agent as InternalAgent
 from app.models.internal import CoordinationContext
-from app.runtime.tools.builder.agent_builder import AgentBuilder
 from app.runtime.tools.models import AgentConfig, AgentRunRequest
 from app.runtime.tools.config import ToolsRuntimeSettings
 from app.runtime.core.exceptions import InvalidConfigurationError
@@ -60,9 +62,9 @@ class AgnoTeamBuilder:
 
     async def _build_members(
         self, context: CoordinationContext
-    ) -> tuple[List[Agent], Dict[str, str], Dict[str, str]]:
+    ) -> tuple[List[Union[Agent, RemoteAgent]], Dict[str, str], Dict[str, str]]:
         """Build all team member agents."""
-        members: List[Agent] = []
+        members: List[Union[Agent, RemoteAgent]] = []
         agent_roles: Dict[str, str] = {}
         agent_names: Dict[str, str] = {}
         for internal_agent in context.team.agents:
@@ -79,7 +81,7 @@ class AgnoTeamBuilder:
         return members, agent_roles, agent_names
 
     def _resolve_team_model(
-        self, context: CoordinationContext, members: List[Agent]
+        self, context: CoordinationContext, members: List[Union[Agent, RemoteAgent]]
     ) -> Optional[Any]:
         """Resolve the team's LLM model, falling back to first member's model."""
         if context.team.model:
@@ -99,7 +101,7 @@ class AgnoTeamBuilder:
     def _build_team_kwargs(
         self,
         context: CoordinationContext,
-        members: List[Agent],
+        members: List[Union[Agent, RemoteAgent]],
         team_model: Optional[Any],
     ) -> Dict[str, Any]:
         """Build the kwargs dict for Team instantiation."""
@@ -255,7 +257,7 @@ class AgnoTeamBuilder:
     def _setup_memory(
         self,
         context: CoordinationContext,
-        members: List[Agent],
+        members: List[Union[Agent, RemoteAgent]],
         team_kwargs: Dict[str, Any],
     ) -> None:
         """Setup memory backend if enabled."""
@@ -280,8 +282,44 @@ class AgnoTeamBuilder:
         *,
         config_overrides: Dict[str, Any],
         role: str,
-    ) -> Agent:
-        """Convert an internal agent definition into an agno Agent instance."""
+    ) -> Union[Agent, RemoteAgent]:
+        """Convert an internal agent definition into an agno Agent or RemoteAgent."""
+        # 检查是否为远程商店 Agent
+        if getattr(internal_agent, "is_remote_store_agent", False):
+            # 获取商店 API Key
+            api_key = None
+            if context.project_id:
+                try:
+                    credential = await api_service_client.get_store_credential(context.project_id)
+                    if credential:
+                        api_key = credential.get("api_key")
+                    else:
+                        self._logger.warning(f"No store credential found for project {context.project_id}")
+                except Exception as e:
+                    self._logger.warning(f"Failed to fetch store credential for team member: {e}")
+            else:
+                self._logger.warning("No project_id in coordination context, cannot fetch store credential")
+
+            # 设置元数据
+            agent_id = str(internal_agent.id) if internal_agent.id else str(uuid.uuid4())
+            metadata = dict(internal_agent.config or {})
+            metadata.update({
+                "role": role,
+                "team_agent": True,
+                "is_remote": True,
+            })
+
+            remote_agent = StoreRemoteAgent(
+                base_url=internal_agent.remote_agent_url,
+                agent_id=internal_agent.store_agent_id,
+                timeout=60.0,
+                override_id=agent_id,
+                override_name=internal_agent.name,
+                override_metadata=metadata,
+                api_key=api_key,
+            )
+            return remote_agent
+
         agent_config = self._build_agent_config(internal_agent, context, config_overrides)
 
         request = AgentRunRequest(

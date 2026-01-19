@@ -398,6 +398,18 @@ class AgentCreateRequest(BaseSchema):
             "markdown": True
         }]
     )
+    is_remote_store_agent: bool = Field(
+        default=False,
+        description="Whether this is a remote agent from store"
+    )
+    remote_agent_url: Optional[str] = Field(
+        None,
+        description="URL of the remote AgentOS server"
+    )
+    store_agent_id: Optional[str] = Field(
+        None,
+        description="Agent ID in the remote store"
+    )
     team_id: Optional[UUID] = Field(
         None,
         description="Team ID to associate the agent with (optional)"
@@ -466,6 +478,18 @@ class AgentUpdateRequest(BaseSchema):
         None,
         description="Updated agent configuration (temperature, max_tokens, markdown, add_datetime_to_context, etc.)"
     )
+    is_remote_store_agent: Optional[bool] = Field(
+        None,
+        description="Update remote status"
+    )
+    remote_agent_url: Optional[str] = Field(
+        None,
+        description="Update remote URL"
+    )
+    store_agent_id: Optional[str] = Field(
+        None,
+        description="Update remote agent ID"
+    )
     tools: Optional[List[AgentToolCreateRequest]] = Field(
         None,
         description="Updated tools to bind to the agent"
@@ -525,6 +549,18 @@ class AgentResponse(BaseSchema):
             "temperature": 0.7,
             "markdown": True
         }]
+    )
+    is_remote_store_agent: bool = Field(
+        default=False,
+        description="Whether this is a remote agent from store"
+    )
+    remote_agent_url: Optional[str] = Field(
+        None,
+        description="URL of the remote AgentOS server"
+    )
+    store_agent_id: Optional[str] = Field(
+        None,
+        description="Agent ID in the remote store"
     )
     team_id: Optional[UUID] = Field(None, description="Associated team ID")
     created_at: datetime = Field(..., description="Record creation timestamp")

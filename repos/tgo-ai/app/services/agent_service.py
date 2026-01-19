@@ -58,6 +58,9 @@ class AgentService:
             instruction=agent_data.instruction,
             model=agent_data.model,
             is_default=agent_data.is_default,
+            is_remote_store_agent=agent_data.is_remote_store_agent,
+            remote_agent_url=agent_data.remote_agent_url,
+            store_agent_id=agent_data.store_agent_id,
             config=agent_data.config,
         )
 

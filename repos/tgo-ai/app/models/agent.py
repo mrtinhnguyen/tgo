@@ -79,6 +79,25 @@ class Agent(BaseModel):
         comment="Agent configuration (temperature, max_tokens, markdown, add_datetime_to_context, etc.)",
     )
 
+    is_remote_store_agent: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether this is a remote agent from store",
+    )
+
+    remote_agent_url: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="URL of the remote AgentOS server",
+    )
+
+    store_agent_id: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Agent ID in the remote store",
+    )
+
     # Relationships
     project: Mapped["Project"] = relationship(
         "Project",
